@@ -17,6 +17,7 @@ import {
 } from './checksum'
 import { nextFreeBlock } from './bat'
 import { dentryGamecodeU32, filenameString } from './dentry'
+import { gcTimestampSecondsFromUnixMs } from './gcTime'
 import { fzeroMakeSaveGameValid, psoMakeSaveGameValid } from './specialSaves'
 
 function titlePresent(dirBlock: Buffer, gamecode: Buffer, filename32: Buffer): number {
@@ -211,6 +212,9 @@ export class MemcardImage {
         dentry.copy(updatedDir, off, 0, DENTRY_SIZE)
         updatedDir.writeUInt16BE(firstBlock, off + 0x36)
         updatedDir.writeUInt8((dentry.readUInt8(0x35) + 1) & 0xff, off + 0x35)
+        if (updatedDir.readUInt32BE(off + 0x28) === 0) {
+          updatedDir.writeUInt32BE(gcTimestampSecondsFromUnixMs(Date.now()), off + 0x28)
+        }
         placed = true
         break
       }

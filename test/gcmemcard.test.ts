@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { BLOCK_SIZE, DENTRY_SIZE } from '../electron/main/gcmemcard/constants'
 import { formatEmptyCard } from '../electron/main/gcmemcard/format'
 import { MemcardImage } from '../electron/main/gcmemcard/memcardImage'
 import { parseGciFile } from '../electron/main/gcmemcard/gci'
+import { GC_CARD_TIME_EPOCH_UNIX_SECONDS } from '../electron/main/gcmemcard/gcTime'
 
 function buildMinimalGci(gamecode: string, filename: string, blockCount: number): Buffer {
   const dentry = Buffer.alloc(DENTRY_SIZE, 0xff)
@@ -75,5 +76,35 @@ describe('gcmemcard', () => {
     if (!parsed.ok) return
     expect(card.importSave(parsed.value.dentry, parsed.value.blocks)).toBe('SUCCESS')
     expect(card.importSave(parsed.value.dentry, parsed.value.blocks)).toBe('TITLEPRESENT')
+  })
+
+  it('fills dentry m_time when GCI has 0 (GC seconds since 2000-01-01)', () => {
+    const raw = formatEmptyCard()
+    const r = MemcardImage.load(raw)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    const card = r.card
+
+    const gci = buildMinimalGci('GALE', 'NoTime', 1)
+    const parsed = parseGciFile(gci)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.value.dentry.readUInt32BE(0x28)).toBe(0)
+
+    const gcSeconds = 123456789
+    const mockMs = (GC_CARD_TIME_EPOCH_UNIX_SECONDS + gcSeconds) * 1000
+    vi.spyOn(Date, 'now').mockReturnValue(mockMs)
+    try {
+      expect(card.importSave(parsed.value.dentry, parsed.value.blocks)).toBe('SUCCESS')
+    } finally {
+      vi.restoreAllMocks()
+    }
+
+    const out = card.toBuffer()
+    const r2 = MemcardImage.load(out)
+    expect(r2.ok).toBe(true)
+    if (!r2.ok) return
+    const dir = r2.card.getCurrentDirBuffer()
+    expect(dir.readUInt32BE(0x28)).toBe(gcSeconds)
   })
 })

@@ -8,6 +8,7 @@ export { formatEmptyCard, createEmptyMemcard } from './format'
 export { parseGciFile } from './gci'
 export type { ParsedGci } from './gci'
 export type { MemcardResultCode } from './constants'
+export { GC_CARD_TIME_EPOCH_UNIX_SECONDS, gcTimestampSecondsFromUnixMs } from './gcTime'
 
 function resultMessage(code: MemcardResultCode): string {
   switch (code) {

@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import chokidar, { type FSWatcher } from 'chokidar'
 import { importGciIntoRaw } from './gcmemcard'
+import { mergeUserSettings, readUserSettings, type MemcardUserSettings } from './userSettings'
 
 export type MemcardFolderEvent = {
   rootDir: string
@@ -57,12 +58,13 @@ export async function backupRawBeforeWrite(
 }
 
 export function registerMemcardIpc() {
-  ipcMain.handle('memcard:pickDirectory', async (event) => {
+  ipcMain.handle('memcard:pickDirectory', async (event, defaultPath?: string | null) => {
     const win =
       BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow()
     if (!win) return null
     const { canceled, filePaths } = await dialog.showOpenDialog(win, {
       properties: ['openDirectory', 'createDirectory'],
+      defaultPath: defaultPath || undefined,
     })
     if (canceled || !filePaths[0]) return null
     return filePaths[0]
@@ -113,6 +115,12 @@ export function registerMemcardIpc() {
 
   ipcMain.handle('memcard:backupBeforeWrite', async (_event, targetRawPath: string) => {
     return backupRawBeforeWrite(targetRawPath)
+  })
+
+  ipcMain.handle('memcard:getUserSettings', async () => readUserSettings())
+
+  ipcMain.handle('memcard:mergeUserSettings', async (_event, partial: Partial<MemcardUserSettings>) => {
+    return mergeUserSettings(partial)
   })
 
   ipcMain.handle(

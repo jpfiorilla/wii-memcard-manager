@@ -17,10 +17,25 @@ When updating this file (rare), update the expected SHA-256 in `test/golden-gtme
 
 SHA-256 is locked in `test/golden-dk-gci.test.ts`.
 
+## `dk-high-upB.gci`
+
+- **Original filename:** `DK high upB.gci`. Stored here as **`dk-high-upB.gci`** (no spaces).
+- **Origin:** Same family as `dk-low-upB.gci` — **GTME**, **4** blocks, distinct replay filename (`TMREC_…bba98e60` vs `…78d31be8`).
+- **Purpose:** Second golden **`.gci`** for multi-import tests (import low then high). Do not edit.
+
+SHA-256 is locked in `test/golden-dk-gci.test.ts`.
+
 ## `GTME-with-dk-low-upB.raw`
 
 - **Origin:** Same starting point as a TM:CE card, then **`dk-low-upB.gci`** was added using **Slippi Dolphin’s Memory Card Manager** (not this app).
 - **Purpose:** **Reference output** for “import this `.gci` into the bare card”: our implementation is tested to match this file **byte-for-byte** when importing into `GTME.raw` (see `test/import-parity.test.ts`).  
   Wii hardware behavior is still for you to confirm separately.
+
+SHA-256 is locked in `test/golden-gtme.test.ts`. Bump only when intentionally replacing the golden.
+
+## `GTME-with-two-DK-upB-gcis.raw`
+
+- **Origin:** **Slippi Nintendont Memory Card Manager** — same `GTME.raw` base as other goldens, with **`dk-low-upB.gci`** and **`dk-high-upB.gci`** (both DK up-B replay saves) added on the card.
+- **Purpose:** **Reference image** for two-save layout: SHA-256 and load/round-trip in `test/golden-gtme.test.ts`. `test/import-parity.test.ts` checks that our two-step `importSave` (low then high) produces the **same directory filenames** as this file; **byte-for-byte** parity with Slippy is not expected yet (different BAT / block allocation vs Dolphin).
 
 SHA-256 is locked in `test/golden-gtme.test.ts`. Bump only when intentionally replacing the golden.

@@ -24,6 +24,24 @@ export default function App() {
   const [watching, setWatching] = useState(false)
 
   useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const s = await window.memcard.getUserSettings()
+      if (cancelled) return
+      if (s.gciFolder) setGciFolder(s.gciFolder)
+      if (s.rawPath) setRawPath(s.rawPath)
+      if (s.lastGciPath) setGciPath(s.lastGciPath)
+      if (s.gciFolder && s.folderWatchEnabled) {
+        const r = await window.memcard.startWatch(s.gciFolder)
+        if (!cancelled && r?.ok) setWatching(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
     window.ipcRenderer.on('main-process-message', (_e, msg) => {
       console.log('[main]', msg)
     })
@@ -39,13 +57,14 @@ export default function App() {
   }, [gciFolder])
 
   const pickGciFolder = async () => {
-    const p = await window.memcard.pickDirectory()
+    const p = await window.memcard.pickDirectory(gciFolder)
     if (!p) return
     if (watching && gciFolder) {
       await window.memcard.stopWatch(gciFolder)
       setWatching(false)
     }
     setGciFolder(p)
+    await window.memcard.mergeUserSettings({ gciFolder: p, folderWatchEnabled: false })
     enqueueSnackbar(`GCI folder: ${p}`, { variant: 'success' })
   }
 
@@ -53,6 +72,7 @@ export default function App() {
     const p = await window.memcard.pickFile()
     if (!p) return
     setRawPath(p)
+    await window.memcard.mergeUserSettings({ rawPath: p })
     enqueueSnackbar(`Output .raw: ${p}`, { variant: 'success' })
   }
 
@@ -60,6 +80,7 @@ export default function App() {
     const p = await window.memcard.pickFile([{ name: 'GCI save', extensions: ['gci'] }])
     if (!p) return
     setGciPath(p)
+    await window.memcard.mergeUserSettings({ lastGciPath: p })
     enqueueSnackbar(`GCI: ${p}`, { variant: 'success' })
   }
 
@@ -84,11 +105,13 @@ export default function App() {
     if (watching) {
       await window.memcard.stopWatch(gciFolder)
       setWatching(false)
+      await window.memcard.mergeUserSettings({ folderWatchEnabled: false })
       enqueueSnackbar('Stopped watching', { variant: 'default' })
     } else {
       const r = await window.memcard.startWatch(gciFolder)
       if (r?.ok) {
         setWatching(true)
+        await window.memcard.mergeUserSettings({ folderWatchEnabled: true })
         enqueueSnackbar('Watching for changes', { variant: 'success' })
       } else {
         enqueueSnackbar('Could not start watch', { variant: 'error' })
@@ -129,7 +152,8 @@ export default function App() {
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 720 }}>
         Watches synced folders (Drive, exports). Import merges a .gci into the chosen Nintendont .raw (backup is
-        created under <code>backups/</code> before each import).
+        created under <code>backups/</code> before each import). Your folder, .raw, and last .gci paths are remembered
+        until you change them.
       </Typography>
 
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} alignItems="flex-start">

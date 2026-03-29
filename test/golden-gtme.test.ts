@@ -14,12 +14,23 @@ export const GOLDEN_GTME_PATH = join(__dirname, 'fixtures', 'golden', 'GTME.raw'
 /** Slippi Dolphin MCM: bare GTME.raw + `dk-low-upB.gci` — target for import parity; do not edit */
 export const GOLDEN_GTME_WITH_DK_PATH = join(__dirname, 'fixtures', 'golden', 'GTME-with-dk-low-upB.raw')
 
+/** Slippi Nintendont MCM: `GTME.raw` + both DK `.gci` saves — see README */
+export const GOLDEN_GTME_WITH_TWO_DK_PATH = join(
+  __dirname,
+  'fixtures',
+  'golden',
+  'GTME-with-two-DK-upB-gcis.raw',
+)
+
 /** SHA-256 of the exact bytes on disk — bump only when intentionally replacing the golden file */
 const GOLDEN_GTME_SHA256 =
   'd8c5f81124fa262b0c026cc6eef9c1aa38336b5a3a823a6a0ee83d88cae651fa'
 
 const GOLDEN_GTME_WITH_DK_SHA256 =
   '891b7fcf796905a5ef61058f9b144048265d06b2565d4d4e7fa3135f15d310a3'
+
+const GOLDEN_GTME_WITH_TWO_DK_SHA256 =
+  '1365d5961263d335c4b6b4b0bd14e4b2789890d3ea98fe212e6b01bdbe35b9c3'
 
 function readGoldenGtme(): Buffer {
   return readFileSync(GOLDEN_GTME_PATH)
@@ -109,5 +120,35 @@ describe('golden GTME-with-dk-low-upB.raw (Slippi Dolphin MCM reference)', () =>
     const paired = countDirFiles(pairedLoad.card.getCurrentDirBuffer())
     expect(paired).toBeGreaterThan(bare)
     expect(paired).toBeLessThan(DIRLEN)
+  })
+})
+
+describe('golden GTME-with-two-DK-upB-gcis.raw (Slippi Nintendont MCM reference)', () => {
+  function readTriple(): Buffer {
+    return readFileSync(GOLDEN_GTME_WITH_TWO_DK_PATH)
+  }
+
+  it('fixture matches recorded SHA-256', () => {
+    const hash = createHash('sha256').update(readTriple()).digest('hex')
+    expect(hash).toBe(GOLDEN_GTME_WITH_TWO_DK_SHA256)
+  })
+
+  it('loads and round-trips bytes without mutation', () => {
+    const original = readTriple()
+    const loaded = MemcardImage.load(original)
+    expect(loaded.ok).toBe(true)
+    if (!loaded.ok) return
+    expect(loaded.card.toBuffer().equals(original)).toBe(true)
+  })
+
+  it('has two more TM:CE replay saves than bare GTME (dk-low + dk-high)', () => {
+    const bareLoad = MemcardImage.load(readGoldenGtme())
+    const tripleLoad = MemcardImage.load(readTriple())
+    expect(bareLoad.ok).toBe(true)
+    expect(tripleLoad.ok).toBe(true)
+    if (!bareLoad.ok || !tripleLoad.ok) return
+    const bare = countDirFiles(bareLoad.card.getCurrentDirBuffer())
+    const triple = countDirFiles(tripleLoad.card.getCurrentDirBuffer())
+    expect(triple).toBe(bare + 2)
   })
 })

@@ -24,7 +24,15 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
 })
 
 contextBridge.exposeInMainWorld('memcard', {
-  pickDirectory: () => ipcRenderer.invoke('memcard:pickDirectory'),
+  getUserSettings: () => ipcRenderer.invoke('memcard:getUserSettings'),
+  mergeUserSettings: (partial: {
+    gciFolder?: string | null
+    rawPath?: string | null
+    lastGciPath?: string | null
+    folderWatchEnabled?: boolean
+  }) => ipcRenderer.invoke('memcard:mergeUserSettings', partial),
+  pickDirectory: (defaultPath?: string | null) =>
+    ipcRenderer.invoke('memcard:pickDirectory', defaultPath),
   pickFile: (filters?: { name: string; extensions: string[] }[]) =>
     ipcRenderer.invoke('memcard:pickFile', filters),
   startWatch: (dir: string) => ipcRenderer.invoke('memcard:startWatch', dir),

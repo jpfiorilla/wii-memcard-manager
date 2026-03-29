@@ -6,8 +6,17 @@ export type MemcardFolderEvent = {
   filePath: string
 }
 
+export type MemcardUserSettings = {
+  gciFolder: string | null
+  rawPath: string | null
+  lastGciPath: string | null
+  folderWatchEnabled: boolean
+}
+
 export type MemcardApi = {
-  pickDirectory: () => Promise<string | null>
+  getUserSettings: () => Promise<MemcardUserSettings>
+  mergeUserSettings: (partial: Partial<MemcardUserSettings>) => Promise<MemcardUserSettings>
+  pickDirectory: (defaultPath?: string | null) => Promise<string | null>
   pickFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>
   startWatch: (dir: string) => Promise<{ ok: true } | { ok: false; error: string }>
   stopWatch: (dir: string) => Promise<{ ok: true }>

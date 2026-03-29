@@ -2,7 +2,7 @@ import { BrowserWindow, dialog, ipcMain } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import chokidar, { type FSWatcher } from 'chokidar'
-import { importGciIntoRaw } from './gcmemcard'
+import { importGciIntoRaw, importGcisIntoRaw, scanGciFolderAgainstRaw } from './gcmemcard'
 import { mergeUserSettings, readUserSettings, type MemcardUserSettings } from './userSettings'
 
 export type MemcardFolderEvent = {
@@ -141,6 +141,38 @@ export function registerMemcardIpc() {
         }
       }
       return importGciIntoRaw(rawPath, gciPath)
+    },
+  )
+
+  ipcMain.handle(
+    'memcard:scanGciFolder',
+    async (_event, args: { rawPath: string; gciFolder: string }) => {
+      const { rawPath, gciFolder } = args
+      if (!rawPath || !gciFolder) {
+        return { ok: false as const, error: 'Missing .raw path or GCI folder' }
+      }
+      return scanGciFolderAgainstRaw(rawPath, gciFolder)
+    },
+  )
+
+  ipcMain.handle(
+    'memcard:importGcis',
+    async (_event, args: { rawPath: string; gciPaths: string[] }) => {
+      const { rawPath, gciPaths } = args
+      if (!rawPath || !gciPaths?.length) {
+        return { ok: false as const, error: 'Missing target .raw or GCI list' }
+      }
+      const backup = await backupRawBeforeWrite(rawPath)
+      if ('ok' in backup && backup.ok === false) {
+        return { ok: false as const, error: backup.error }
+      }
+      if ('skipped' in backup && backup.skipped) {
+        return {
+          ok: false as const,
+          error: 'Target .raw does not exist; choose an existing memory card file first.',
+        }
+      }
+      return importGcisIntoRaw(rawPath, gciPaths)
     },
   )
 }

@@ -180,6 +180,21 @@ export class MemcardImage {
     return Buffer.concat(parts)
   }
 
+  /** True if this save identity (game code + 32-char filename) already exists on the current directory. */
+  isTitlePresent(dentry: Buffer): boolean {
+    const gamecode = dentry.subarray(0, 4)
+    const fn = dentry.subarray(8, 8 + DENTRY_STRLEN)
+    return titlePresent(this.getCurrentDirBuffer(), gamecode, fn) !== DIRLEN
+  }
+
+  getDirectoryEntryCount(): number {
+    return getNumFiles(this.getCurrentDirBuffer())
+  }
+
+  getFreeBlockCount(): number {
+    return this.getCurrentBatBuffer().readUInt16BE(0x06)
+  }
+
   importSave(dentry: Buffer, saveBlocks: Buffer[]): MemcardResultCode {
     if (getNumFiles(this.getCurrentDirBuffer()) >= DIRLEN) {
       return 'OUTOFDIRENTRIES'

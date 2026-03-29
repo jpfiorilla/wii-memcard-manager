@@ -13,6 +13,21 @@ export type MemcardUserSettings = {
   folderWatchEnabled: boolean
 }
 
+export type GciFolderScanCardStats = {
+  directoryFileCount: number
+  freeBlocks: number
+}
+
+export type GciFolderEntry = {
+  path: string
+  fileName: string
+  saveName: string
+  alreadyOnCard: boolean
+  parseError: string | null
+  blockCount: number
+  mtimeMs: number
+}
+
 export type MemcardApi = {
   getUserSettings: () => Promise<MemcardUserSettings>
   mergeUserSettings: (partial: Partial<MemcardUserSettings>) => Promise<MemcardUserSettings>
@@ -24,6 +39,14 @@ export type MemcardApi = {
     rawPath: string,
   ) => Promise<{ skipped: true } | { ok: true; backupPath: string } | { ok: false; error: string }>
   importGci: (rawPath: string, gciPath: string) => Promise<{ ok: true } | { ok: false; error: string }>
+  scanGciFolder: (args: {
+    rawPath: string
+    gciFolder: string
+  }) => Promise<
+    | { ok: true; entries: GciFolderEntry[]; cardStats: GciFolderScanCardStats }
+    | { ok: false; error: string }
+  >
+  importGcis: (rawPath: string, gciPaths: string[]) => Promise<{ ok: true } | { ok: false; error: string }>
   onFolderChanged: (callback: (data: MemcardFolderEvent) => void) => () => void
 }
 

@@ -1,5 +1,20 @@
 import { ipcRenderer, contextBridge } from 'electron'
 
+type GciFolderEntry = {
+  path: string
+  fileName: string
+  saveName: string
+  alreadyOnCard: boolean
+  parseError: string | null
+  blockCount: number
+  mtimeMs: number
+}
+
+type GciFolderScanCardStats = {
+  directoryFileCount: number
+  freeBlocks: number
+}
+
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
   on(...args: Parameters<typeof ipcRenderer.on>) {
@@ -40,6 +55,15 @@ contextBridge.exposeInMainWorld('memcard', {
   backupBeforeWrite: (rawPath: string) => ipcRenderer.invoke('memcard:backupBeforeWrite', rawPath),
   importGci: (rawPath: string, gciPath: string) =>
     ipcRenderer.invoke('memcard:importGci', { rawPath, gciPath }) as Promise<
+      { ok: true } | { ok: false; error: string }
+    >,
+  scanGciFolder: (args: { rawPath: string; gciFolder: string }) =>
+    ipcRenderer.invoke('memcard:scanGciFolder', args) as Promise<
+      | { ok: true; entries: GciFolderEntry[]; cardStats: GciFolderScanCardStats }
+      | { ok: false; error: string }
+    >,
+  importGcis: (rawPath: string, gciPaths: string[]) =>
+    ipcRenderer.invoke('memcard:importGcis', { rawPath, gciPaths }) as Promise<
       { ok: true } | { ok: false; error: string }
     >,
   onFolderChanged: (callback: (data: { rootDir: string; eventKind: string; filePath: string }) => void) => {

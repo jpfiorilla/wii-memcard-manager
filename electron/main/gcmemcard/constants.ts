@@ -44,5 +44,6 @@ export type MemcardResultCode =
   | 'LENGTHFAIL'
   | 'INVALIDFILESIZE'
   | 'TITLEPRESENT'
+  | 'NOTFOUND'
   | 'NOMEMCARD'
   | 'FAIL'

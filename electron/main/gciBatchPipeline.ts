@@ -1,9 +1,11 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { app } from 'electron'
+import { touchFileAccessAndModified } from './fileTimes'
 import { dentryGameCodeString } from './gcmemcard/dentry'
+import { MemCard2043Mb } from './gcmemcard/constants'
 import { formatEmptyCard } from './gcmemcard/format'
-import { importGcisIntoRaw } from './gcmemcard'
+import { gcTimestampSecondsFromUnixMs, importGcisIntoMemcard, MemcardImage } from './gcmemcard'
 import { parseGciFile } from './gcmemcard/gci'
 import { isGciProcessed, markGciProcessed } from './processedGciStore'
 import { enqueuePendingSd } from './pendingSdQueue'
@@ -105,17 +107,23 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
     const rawPath = await uniqueStagingRawPath(stagingDir, gameCode)
 
     try {
-      const rawBuf = formatEmptyCard()
-      await fs.writeFile(rawPath, rawBuf)
+      const gcSec = gcTimestampSecondsFromUnixMs(Date.now())
+      const rawBuf = formatEmptyCard(MemCard2043Mb, gcSec)
+      const cardLoad = MemcardImage.load(rawBuf)
+      if (!cardLoad.ok) {
+        errors.push(`${gameCode}: ${cardLoad.error}`)
+        continue
+      }
+      const imp = await importGcisIntoMemcard(cardLoad.card, paths, { mTimeGcSeconds: gcSec })
+      if (!imp.ok) {
+        errors.push(`${gameCode}: ${imp.error}`)
+        continue
+      }
+      await fs.writeFile(rawPath, cardLoad.card.toBuffer())
+      await touchFileAccessAndModified(rawPath)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       errors.push(`${gameCode}: ${msg}`)
-      continue
-    }
-
-    const imp = await importGcisIntoRaw(rawPath, paths)
-    if (!imp.ok) {
-      errors.push(`${gameCode}: ${imp.error}`)
       try {
         await fs.unlink(rawPath)
       } catch {

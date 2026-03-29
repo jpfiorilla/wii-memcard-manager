@@ -2,7 +2,7 @@ import { BrowserWindow, dialog, ipcMain } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import chokidar, { type FSWatcher } from 'chokidar'
-import { importGciIntoRaw, importGcisIntoRaw, scanGciFolderAgainstRaw } from './gcmemcard'
+import { importGciIntoRaw, importGcisIntoRaw, scanGciFolderAgainstRaw, syncFolderSelectionToRaw } from './gcmemcard'
 import { runGciBatchBuild } from './gciBatchPipeline'
 import { mergeUserSettings, readUserSettings, type MemcardUserSettings } from './userSettings'
 import { peekPendingSdAll, removePendingByLocalPath } from './pendingSdQueue'
@@ -323,6 +323,39 @@ export function registerMemcardIpc() {
         }
       }
       return importGcisIntoRaw(rawPath, gciPaths)
+    },
+  )
+
+  ipcMain.handle(
+    'memcard:syncFolderSelection',
+    async (
+      _event,
+      args: { rawPath: string; gciPathsToAdd: string[]; gciPathsToRemove: string[] },
+    ) => {
+      const { rawPath, gciPathsToAdd, gciPathsToRemove } = args
+      if (!rawPath) {
+        return { ok: false as const, error: 'Missing target .raw' }
+      }
+      if (
+        (!gciPathsToAdd || gciPathsToAdd.length === 0) &&
+        (!gciPathsToRemove || gciPathsToRemove.length === 0)
+      ) {
+        return { ok: false as const, error: 'Nothing to apply' }
+      }
+      const backup = await backupRawBeforeWrite(rawPath)
+      if ('ok' in backup && backup.ok === false) {
+        return { ok: false as const, error: backup.error }
+      }
+      if ('skipped' in backup && backup.skipped) {
+        return {
+          ok: false as const,
+          error: 'Target .raw does not exist; choose an existing memory card file first.',
+        }
+      }
+      return syncFolderSelectionToRaw(rawPath, {
+        gciPathsToAdd: gciPathsToAdd ?? [],
+        gciPathsToRemove: gciPathsToRemove ?? [],
+      })
     },
   )
 }

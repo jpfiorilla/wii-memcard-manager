@@ -15,7 +15,7 @@ import {
   verifyDirectoryChecksum,
   verifyBatChecksum,
 } from './checksum'
-import { nextFreeBlock } from './bat'
+import { getNextBlockFromBat, nextFreeBlock } from './bat'
 import { dentryGamecodeU32, filenameString } from './dentry'
 import { gcTimestampSecondsFromUnixMs } from './gcTime'
 import { fzeroMakeSaveGameValid, psoMakeSaveGameValid } from './specialSaves'
@@ -195,7 +195,11 @@ export class MemcardImage {
     return this.getCurrentBatBuffer().readUInt16BE(0x06)
   }
 
-  importSave(dentry: Buffer, saveBlocks: Buffer[]): MemcardResultCode {
+  importSave(
+    dentry: Buffer,
+    saveBlocks: Buffer[],
+    opts?: { mTimeGcSeconds?: number },
+  ): MemcardResultCode {
     if (getNumFiles(this.getCurrentDirBuffer()) >= DIRLEN) {
       return 'OUTOFDIRENTRIES'
     }
@@ -228,7 +232,11 @@ export class MemcardImage {
         updatedDir.writeUInt16BE(firstBlock, off + 0x36)
         updatedDir.writeUInt8((dentry.readUInt8(0x35) + 1) & 0xff, off + 0x35)
         if (updatedDir.readUInt32BE(off + 0x28) === 0) {
-          updatedDir.writeUInt32BE(gcTimestampSecondsFromUnixMs(Date.now()), off + 0x28)
+          const sec =
+            opts?.mTimeGcSeconds !== undefined
+              ? opts.mTimeGcSeconds >>> 0
+              : gcTimestampSecondsFromUnixMs(Date.now())
+          updatedDir.writeUInt32BE(sec, off + 0x28)
         }
         placed = true
         break
@@ -279,6 +287,69 @@ export class MemcardImage {
     if (prevBatIdx === 0) this.batA = updatedBat
     else this.batB = updatedBat
     this.currentBatIdx = prevBatIdx
+
+    return 'SUCCESS'
+  }
+
+  /**
+   * Remove a save that matches `dentry` identity (game code + 32-byte filename) on the active directory.
+   * Frees BAT chain and clears the directory slot (Dolphin-compatible).
+   */
+  removeSaveByIdentity(dentry: Buffer): MemcardResultCode {
+    const gamecode = dentry.subarray(0, 4)
+    const fn = dentry.subarray(8, 8 + DENTRY_STRLEN)
+    const idx = titlePresent(this.getCurrentDirBuffer(), gamecode, fn)
+    if (idx === DIRLEN) {
+      return 'NOTFOUND'
+    }
+
+    const off = idx * DENTRY_SIZE
+    const curDir = this.getCurrentDirBuffer()
+    const firstBlock = curDir.readUInt16BE(off + 0x36)
+    const blockCount = curDir.readUInt16BE(off + 0x38)
+
+    if (blockCount === 0 || firstBlock === 0xffff || firstBlock < MC_FST_BLOCKS) {
+      return 'FAIL'
+    }
+
+    const updatedBat = Buffer.from(this.getCurrentBatBuffer())
+    let block = firstBlock
+    for (let i = 0; i < blockCount; i++) {
+      if (block === 0xffff || block < MC_FST_BLOCKS || block >= this.maxBlock) {
+        return 'FAIL'
+      }
+      const next = getNextBlockFromBat(updatedBat, block)
+      updatedBat.writeUInt16BE(0, 0x0a + (block - MC_FST_BLOCKS) * 2)
+      const dataIdx = block - MC_FST_BLOCKS
+      if (dataIdx >= 0 && dataIdx < this.dataBlocks.length) {
+        this.dataBlocks[dataIdx] = Buffer.alloc(BLOCK_SIZE, 0xff)
+      }
+      block = next
+    }
+    if (block !== 0xffff) {
+      return 'FAIL'
+    }
+
+    const free = updatedBat.readUInt16BE(0x06)
+    updatedBat.writeUInt16BE((free + blockCount) & 0xffff, 0x06)
+    updatedBat.writeUInt16BE((updatedBat.readUInt16BE(0x04) + 1) & 0xffff, 0x04)
+    setBatChecksum(updatedBat)
+
+    const prevBatIdx = (1 - this.currentBatIdx) as 0 | 1
+    if (prevBatIdx === 0) this.batA = updatedBat
+    else this.batB = updatedBat
+    this.currentBatIdx = prevBatIdx
+
+    const updatedDir = Buffer.from(this.getCurrentDirBuffer())
+    updatedDir.fill(0xff, off, off + DENTRY_SIZE)
+    const uc = (updatedDir.readUInt16BE(0x1ffa) + 1) & 0xffff
+    updatedDir.writeUInt16BE(uc, 0x1ffa)
+    setDirectoryChecksum(updatedDir)
+
+    const prevDirIdx = (1 - this.currentDirIdx) as 0 | 1
+    if (prevDirIdx === 0) this.dirA = updatedDir
+    else this.dirB = updatedDir
+    this.currentDirIdx = prevDirIdx
 
     return 'SUCCESS'
   }

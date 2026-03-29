@@ -73,6 +73,13 @@ contextBridge.exposeInMainWorld('memcard', {
     ipcRenderer.invoke('memcard:importGcis', { rawPath, gciPaths }) as Promise<
       { ok: true } | { ok: false; error: string }
     >,
+  syncFolderSelection: (
+    rawPath: string,
+    args: { gciPathsToAdd: string[]; gciPathsToRemove: string[] },
+  ) =>
+    ipcRenderer.invoke('memcard:syncFolderSelection', { rawPath, ...args }) as Promise<
+      { ok: true } | { ok: false; error: string }
+    >,
   onFolderChanged: (callback: (data: { rootDir: string; eventKind: string; filePath: string }) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, data: { rootDir: string; eventKind: string; filePath: string }) =>
       callback(data)

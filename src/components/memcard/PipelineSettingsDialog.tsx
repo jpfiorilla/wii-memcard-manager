@@ -1,0 +1,152 @@
+import type { Dispatch, SetStateAction } from "react";
+import {
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControlLabel,
+  Stack,
+  Switch,
+  TextField,
+  Typography,
+} from "@mui/material";
+import FolderOpenIcon from "@mui/icons-material/FolderOpen";
+import type { PipelineSettingsState } from "@/types/memcard";
+
+type PipelineSettingsDialogProps = {
+  open: boolean;
+  onClose: () => void;
+  pipeline: PipelineSettingsState;
+  setPipeline: Dispatch<SetStateAction<PipelineSettingsState>>;
+  onPickStagingDir: () => void;
+  updatePipeline: (partial: Partial<PipelineSettingsState>) => Promise<void>;
+};
+
+export function PipelineSettingsDialog({
+  open,
+  onClose,
+  pipeline,
+  setPipeline,
+  onPickStagingDir,
+  updatePipeline,
+}: PipelineSettingsDialogProps) {
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullWidth
+      maxWidth="sm"
+      aria-labelledby="pipeline-settings-title"
+    >
+      <DialogTitle id="pipeline-settings-title">
+        Background pipeline (macOS SD)
+      </DialogTitle>
+      <DialogContent dividers>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Optional automation. After a quiet period in the watched folder, new
+          saves are merged into staging <code>.raw</code> files (one per game
+          code). When a volume with <code>nintendont/saves</code> appears,
+          pending images copy there (existing files go to{" "}
+          <code>backups/</code> on the SD first).
+        </Typography>
+        <Stack spacing={1.5}>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={1}
+            alignItems={{ sm: "center" }}
+            flexWrap="wrap"
+          >
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<FolderOpenIcon />}
+              onClick={() => void onPickStagingDir()}
+            >
+              Staging folder
+            </Button>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ wordBreak: "break-all", flex: 1 }}
+            >
+              {pipeline.stagingDir ?? "Default: app data / staging"}
+            </Typography>
+          </Stack>
+          <TextField
+            label="Quiet period before build (ms)"
+            type="number"
+            size="small"
+            sx={{ maxWidth: 280 }}
+            value={pipeline.gciBatchDebounceMs}
+            onChange={(e) =>
+              setPipeline((p) => ({
+                ...p,
+                gciBatchDebounceMs: Number(e.target.value) || 4000,
+              }))
+            }
+            onBlur={(e) => {
+              const n = Number(e.target.value);
+              if (Number.isFinite(n) && n >= 500)
+                void updatePipeline({ gciBatchDebounceMs: n });
+            }}
+          />
+          <TextField
+            label="Path on SD (relative to volume)"
+            size="small"
+            fullWidth
+            value={pipeline.nintendontSavesRelativePath}
+            onChange={(e) =>
+              setPipeline((p) => ({
+                ...p,
+                nintendontSavesRelativePath: e.target.value,
+              }))
+            }
+            onBlur={(e) =>
+              void updatePipeline({
+                nintendontSavesRelativePath: e.target.value,
+              })
+            }
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={pipeline.autoBuildRaw}
+                onChange={(_, v) => void updatePipeline({ autoBuildRaw: v })}
+                size="small"
+              />
+            }
+            label="Auto-build .raw from new GCIs (when Watch is on)"
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={pipeline.autoCopyToSd}
+                onChange={(_, v) => void updatePipeline({ autoCopyToSd: v })}
+                size="small"
+              />
+            }
+            label="Auto-copy staging images to SD when mounted"
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={pipeline.confirmBeforeSdCopy}
+                onChange={(_, v) =>
+                  void updatePipeline({ confirmBeforeSdCopy: v })
+                }
+                size="small"
+              />
+            }
+            label="Confirm each file before SD copy (dialog)"
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, py: 2 }}>
+        <Button variant="contained" onClick={onClose}>
+          Done
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}

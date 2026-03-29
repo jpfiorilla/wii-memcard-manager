@@ -54,6 +54,10 @@ export type MemcardApi = {
     | { ok: false; error: string }
   >
   importGcis: (rawPath: string, gciPaths: string[]) => Promise<{ ok: true } | { ok: false; error: string }>
+  syncFolderSelection: (
+    rawPath: string,
+    args: { gciPathsToAdd: string[]; gciPathsToRemove: string[] },
+  ) => Promise<{ ok: true } | { ok: false; error: string }>
   onFolderChanged: (callback: (data: MemcardFolderEvent) => void) => () => void
   onBatchBuilt: (
     callback: (data: { outputs: { path: string; gameCode: string }[]; errors: string[] }) => void,

@@ -5,10 +5,11 @@ import {
   MemCard2043Mb,
 } from './constants'
 import { setHeaderChecksum, setDirectoryChecksum, setBatChecksum } from './checksum'
+import { gcTimestampSecondsFromUnixMs } from './gcTime'
 import { MemcardImage } from './memcardImage'
 
 /** Create a new empty formatted card image (matches Dolphin `GCMemcard::Format` layout). */
-export function formatEmptyCard(sizeMb: number = MemCard2043Mb): Buffer {
+export function formatEmptyCard(sizeMb: number = MemCard2043Mb, formatGcSeconds?: number): Buffer {
   const maxBlock = sizeMb * MBIT_TO_BLOCKS
   const totalSize = maxBlock * BLOCK_SIZE
   const card = Buffer.alloc(totalSize, 0xff)
@@ -21,7 +22,10 @@ export function formatEmptyCard(sizeMb: number = MemCard2043Mb): Buffer {
   for (let i = 0; i < 12; i++) {
     hdr[i] = (0xab + i) & 0xff
   }
-  hdr.writeBigUInt64BE(BigInt(Date.now()), 0x0c)
+  const fmt =
+    formatGcSeconds !== undefined ? formatGcSeconds : gcTimestampSecondsFromUnixMs(Date.now())
+  /** u64 seconds since 2000-01-01 00:00:00 UTC (Dolphin `format_time`, not Unix ms). */
+  hdr.writeBigUInt64BE(BigInt(fmt >>> 0), 0x0c)
   hdr.writeUInt32BE(0, 0x14)
   hdr.writeUInt32BE(1, 0x18)
   hdr.writeUInt32BE(0, 0x1c)
@@ -54,8 +58,8 @@ export function formatEmptyCard(sizeMb: number = MemCard2043Mb): Buffer {
   return card
 }
 
-export function createEmptyMemcard(sizeMb: number = MemCard2043Mb): MemcardImage {
-  const raw = formatEmptyCard(sizeMb)
+export function createEmptyMemcard(sizeMb: number = MemCard2043Mb, formatGcSeconds?: number): MemcardImage {
+  const raw = formatEmptyCard(sizeMb, formatGcSeconds)
   const loaded = MemcardImage.load(raw)
   if (!loaded.ok) {
     throw new Error(loaded.error)

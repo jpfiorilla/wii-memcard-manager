@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { BLOCK_SIZE, DENTRY_SIZE } from '../electron/main/gcmemcard/constants'
+import { BLOCK_SIZE, DENTRY_SIZE, MemCard2043Mb } from '../electron/main/gcmemcard/constants'
 import { formatEmptyCard } from '../electron/main/gcmemcard/format'
 import { MemcardImage } from '../electron/main/gcmemcard/memcardImage'
 import { parseGciFile } from '../electron/main/gcmemcard/gci'
@@ -33,6 +33,18 @@ function buildMinimalGci(gamecode: string, filename: string, blockCount: number)
 }
 
 describe('gcmemcard', () => {
+  it('writes header format time at 0x0c as u64 seconds since 2000 (not Unix ms)', () => {
+    const gcSeconds = 45_678_901
+    const mockMs = (GC_CARD_TIME_EPOCH_UNIX_SECONDS + gcSeconds) * 1000
+    vi.spyOn(Date, 'now').mockReturnValue(mockMs)
+    try {
+      const raw = formatEmptyCard()
+      expect(raw.readBigUInt64BE(0x0c)).toBe(BigInt(gcSeconds))
+    } finally {
+      vi.restoreAllMocks()
+    }
+  })
+
   it('loads formatted empty card', () => {
     const raw = formatEmptyCard()
     const r = MemcardImage.load(raw)
@@ -76,6 +88,44 @@ describe('gcmemcard', () => {
     if (!parsed.ok) return
     expect(card.importSave(parsed.value.dentry, parsed.value.blocks)).toBe('SUCCESS')
     expect(card.importSave(parsed.value.dentry, parsed.value.blocks)).toBe('TITLEPRESENT')
+  })
+
+  it('removeSaveByIdentity clears a save and frees its block', () => {
+    const raw = formatEmptyCard()
+    const r = MemcardImage.load(raw)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    const gci = buildMinimalGci('GALE', 'RemoveMe', 1)
+    const parsed = parseGciFile(gci)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(r.card.importSave(parsed.value.dentry, parsed.value.blocks)).toBe('SUCCESS')
+    const freeBefore = r.card.getFreeBlockCount()
+    expect(r.card.removeSaveByIdentity(parsed.value.dentry)).toBe('SUCCESS')
+    expect(r.card.getFreeBlockCount()).toBe(freeBefore + 1)
+    const dir = r.card.getCurrentDirBuffer()
+    expect(dir.readUInt32BE(0)).toBe(0xffffffff)
+  })
+
+  it('matches header format time and dentry m_time when building with the same GC second', () => {
+    const gcSec = 123456789
+    const raw = formatEmptyCard(MemCard2043Mb, gcSec)
+    expect(raw.readBigUInt64BE(0x0c)).toBe(BigInt(gcSec))
+    const r = MemcardImage.load(raw)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    const gci = buildMinimalGci('GALE', 'SameTime', 1)
+    const parsed = parseGciFile(gci)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(r.card.importSave(parsed.value.dentry, parsed.value.blocks, { mTimeGcSeconds: gcSec })).toBe(
+      'SUCCESS',
+    )
+    const out = r.card.toBuffer()
+    const r2 = MemcardImage.load(out)
+    expect(r2.ok).toBe(true)
+    if (!r2.ok) return
+    expect(r2.card.getCurrentDirBuffer().readUInt32BE(0x28)).toBe(gcSec)
   })
 
   it('fills dentry m_time when GCI has 0 (GC seconds since 2000-01-01)', () => {

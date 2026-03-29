@@ -11,9 +11,15 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 /** Real Wii / Nintendont TM:CE card — do not modify; see test/fixtures/golden/README.md */
 export const GOLDEN_GTME_PATH = join(__dirname, 'fixtures', 'golden', 'GTME.raw')
 
+/** Slippi Dolphin MCM: bare GTME.raw + `dk-low-upB.gci` — target for import parity; do not edit */
+export const GOLDEN_GTME_WITH_DK_PATH = join(__dirname, 'fixtures', 'golden', 'GTME-with-dk-low-upB.raw')
+
 /** SHA-256 of the exact bytes on disk — bump only when intentionally replacing the golden file */
 const GOLDEN_GTME_SHA256 =
   'd8c5f81124fa262b0c026cc6eef9c1aa38336b5a3a823a6a0ee83d88cae651fa'
+
+const GOLDEN_GTME_WITH_DK_SHA256 =
+  '891b7fcf796905a5ef61058f9b144048265d06b2565d4d4e7fa3135f15d310a3'
 
 function readGoldenGtme(): Buffer {
   return readFileSync(GOLDEN_GTME_PATH)
@@ -72,5 +78,36 @@ describe('golden GTME.raw (Wii TM:CE default save)', () => {
     const free = bat.readUInt16BE(0x06)
     expect(free).toBeGreaterThan(0)
     expect(free).toBeLessThanOrEqual(loaded.card.maxBlock - 5)
+  })
+})
+
+describe('golden GTME-with-dk-low-upB.raw (Slippi Dolphin MCM reference)', () => {
+  function readPaired(): Buffer {
+    return readFileSync(GOLDEN_GTME_WITH_DK_PATH)
+  }
+
+  it('fixture matches recorded SHA-256', () => {
+    const hash = createHash('sha256').update(readPaired()).digest('hex')
+    expect(hash).toBe(GOLDEN_GTME_WITH_DK_SHA256)
+  })
+
+  it('loads and round-trips bytes without mutation', () => {
+    const original = readPaired()
+    const loaded = MemcardImage.load(original)
+    expect(loaded.ok).toBe(true)
+    if (!loaded.ok) return
+    expect(loaded.card.toBuffer().equals(original)).toBe(true)
+  })
+
+  it('has more directory entries than bare GTME (DK save added)', () => {
+    const bareLoad = MemcardImage.load(readGoldenGtme())
+    const pairedLoad = MemcardImage.load(readPaired())
+    expect(bareLoad.ok).toBe(true)
+    expect(pairedLoad.ok).toBe(true)
+    if (!bareLoad.ok || !pairedLoad.ok) return
+    const bare = countDirFiles(bareLoad.card.getCurrentDirBuffer())
+    const paired = countDirFiles(pairedLoad.card.getCurrentDirBuffer())
+    expect(paired).toBeGreaterThan(bare)
+    expect(paired).toBeLessThan(DIRLEN)
   })
 })

@@ -17,6 +17,10 @@ When updating this file (rare), update the expected SHA-256 in `test/golden-gtme
 
 SHA-256 is locked in `test/golden-dk-gci.test.ts`.
 
-## Future: paired `.raw` (not added yet)
+## `GTME-with-dk-low-upB.raw`
 
-When you add a memory card image that **already contains this save**, place it here (e.g. `GTME-with-dk-low-upB.raw`) and add a sibling test file with SHA + load checks—same pattern as `GTME.raw`.
+- **Origin:** Same starting point as a TM:CE card, then **`dk-low-upB.gci`** was added using **Slippi Dolphin’s Memory Card Manager** (not this app).
+- **Purpose:** **Reference output** for “import this `.gci` into the bare card”: our implementation is tested to match this file **byte-for-byte** when importing into `GTME.raw` (see `test/import-parity.test.ts`).  
+  Wii hardware behavior is still for you to confirm separately.
+
+SHA-256 is locked in `test/golden-gtme.test.ts`. Bump only when intentionally replacing the golden.

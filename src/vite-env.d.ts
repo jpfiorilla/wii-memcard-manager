@@ -11,6 +11,13 @@ export type MemcardUserSettings = {
   rawPath: string | null
   lastGciPath: string | null
   folderWatchEnabled: boolean
+  stagingDir: string | null
+  gciBatchDebounceMs: number
+  nintendontSavesRelativePath: string
+  autoBuildRaw: boolean
+  autoCopyToSd: boolean
+  confirmBeforeSdCopy: boolean
+  requireNintendontPath: boolean
 }
 
 export type GciFolderScanCardStats = {
@@ -48,6 +55,14 @@ export type MemcardApi = {
   >
   importGcis: (rawPath: string, gciPaths: string[]) => Promise<{ ok: true } | { ok: false; error: string }>
   onFolderChanged: (callback: (data: MemcardFolderEvent) => void) => () => void
+  onBatchBuilt: (
+    callback: (data: { outputs: { path: string; gameCode: string }[]; errors: string[] }) => void,
+  ) => () => void
+  onBatchBuildError: (callback: (data: { error: string }) => void) => () => void
+  onVolumeMounted: (callback: (data: { mountPath: string; savesDir: string }) => void) => () => void
+  onVolumeUnmounted: (callback: (data: { mountPath: string }) => void) => () => void
+  onSdTransferDone: (callback: (data: { destPath: string; localPath: string }) => void) => () => void
+  onSdTransferError: (callback: (data: { error: string; localPath: string }) => void) => () => void
 }
 
 declare global {

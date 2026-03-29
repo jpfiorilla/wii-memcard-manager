@@ -45,6 +45,13 @@ contextBridge.exposeInMainWorld('memcard', {
     rawPath?: string | null
     lastGciPath?: string | null
     folderWatchEnabled?: boolean
+    stagingDir?: string | null
+    gciBatchDebounceMs?: number
+    nintendontSavesRelativePath?: string
+    autoBuildRaw?: boolean
+    autoCopyToSd?: boolean
+    confirmBeforeSdCopy?: boolean
+    requireNintendontPath?: boolean
   }) => ipcRenderer.invoke('memcard:mergeUserSettings', partial),
   pickDirectory: (defaultPath?: string | null) =>
     ipcRenderer.invoke('memcard:pickDirectory', defaultPath),
@@ -71,6 +78,44 @@ contextBridge.exposeInMainWorld('memcard', {
       callback(data)
     ipcRenderer.on('memcard:folder-changed', listener)
     return () => ipcRenderer.removeListener('memcard:folder-changed', listener)
+  },
+  onBatchBuilt: (
+    callback: (data: { outputs: { path: string; gameCode: string }[]; errors: string[] }) => void,
+  ) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: { outputs: { path: string; gameCode: string }[]; errors: string[] },
+    ) => callback(data)
+    ipcRenderer.on('memcard:batch-built', listener)
+    return () => ipcRenderer.removeListener('memcard:batch-built', listener)
+  },
+  onBatchBuildError: (callback: (data: { error: string }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: { error: string }) => callback(data)
+    ipcRenderer.on('memcard:batch-build-error', listener)
+    return () => ipcRenderer.removeListener('memcard:batch-build-error', listener)
+  },
+  onVolumeMounted: (callback: (data: { mountPath: string; savesDir: string }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: { mountPath: string; savesDir: string }) =>
+      callback(data)
+    ipcRenderer.on('memcard:volume-mounted', listener)
+    return () => ipcRenderer.removeListener('memcard:volume-mounted', listener)
+  },
+  onVolumeUnmounted: (callback: (data: { mountPath: string }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: { mountPath: string }) => callback(data)
+    ipcRenderer.on('memcard:volume-unmounted', listener)
+    return () => ipcRenderer.removeListener('memcard:volume-unmounted', listener)
+  },
+  onSdTransferDone: (callback: (data: { destPath: string; localPath: string }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: { destPath: string; localPath: string }) =>
+      callback(data)
+    ipcRenderer.on('memcard:sd-transfer-done', listener)
+    return () => ipcRenderer.removeListener('memcard:sd-transfer-done', listener)
+  },
+  onSdTransferError: (callback: (data: { error: string; localPath: string }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: { error: string; localPath: string }) =>
+      callback(data)
+    ipcRenderer.on('memcard:sd-transfer-error', listener)
+    return () => ipcRenderer.removeListener('memcard:sd-transfer-error', listener)
   },
 })
 

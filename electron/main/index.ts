@@ -1,10 +1,12 @@
-import { app, BrowserWindow, shell, ipcMain } from 'electron'
+import fs from 'node:fs'
+import { app, BrowserWindow, shell, ipcMain, Tray, Menu } from 'electron'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
 import { update } from './update'
-import { registerMemcardIpc } from './memcard'
+import { registerMemcardIpc, resumeMemcardSession } from './memcard'
+import { createAppWindowIcon, createTrayMenuBarImage } from './trayIcon'
 
 const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -25,9 +27,12 @@ export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
 export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 export const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
 
+const publicDir = path.join(process.env.APP_ROOT, 'public')
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
-  ? path.join(process.env.APP_ROOT, 'public')
-  : RENDERER_DIST
+  ? publicDir
+  : fs.existsSync(path.join(publicDir, 'trayTemplate.png')) || fs.existsSync(path.join(publicDir, 'favicon.ico'))
+    ? publicDir
+    : RENDERER_DIST
 
 // Disable GPU Acceleration for Windows 7
 if (os.release().startsWith('6.1')) app.disableHardwareAcceleration()
@@ -41,13 +46,14 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 let win: BrowserWindow | null = null
+let tray: Tray | null = null
 const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
 
 async function createWindow() {
   win = new BrowserWindow({
     title: 'Wii Memcard Manager',
-    icon: path.join(process.env.VITE_PUBLIC, 'favicon.ico'),
+    icon: createAppWindowIcon(process.env.APP_ROOT, process.env.VITE_PUBLIC),
     webPreferences: {
       preload,
       // Warning: Enable nodeIntegration and disable contextIsolation is not secure in production
@@ -84,11 +90,42 @@ async function createWindow() {
 
 registerMemcardIpc()
 
-app.whenReady().then(createWindow)
+app.whenReady().then(async () => {
+  createWindow()
+  await resumeMemcardSession()
+  if (process.platform === 'darwin') {
+    const img = createTrayMenuBarImage(process.env.APP_ROOT, process.env.VITE_PUBLIC)
+    if (img.isEmpty()) {
+      console.error('[tray] Icon image is empty; menu bar tray may not appear')
+    }
+    tray = new Tray(img)
+    tray.setToolTip('Wii Memcard Manager — saves folder watch and SD copy')
+    const showMainWindow = () => {
+      app.dock.show()
+      if (win) {
+        win.show()
+        win.focus()
+      } else {
+        void createWindow()
+      }
+    }
+    tray.setContextMenu(
+      Menu.buildFromTemplate([
+        { label: 'Show', click: () => showMainWindow() },
+        { type: 'separator' },
+        { label: 'Quit', click: () => app.quit() },
+      ]),
+    )
+  }
+})
 
 app.on('window-all-closed', () => {
   win = null
-  if (process.platform !== 'darwin') app.quit()
+  if (process.platform !== 'darwin') {
+    app.quit()
+  } else if (tray) {
+    app.dock.hide()
+  }
 })
 
 app.on('second-instance', () => {
@@ -100,11 +137,14 @@ app.on('second-instance', () => {
 })
 
 app.on('activate', () => {
+  if (process.platform === 'darwin') {
+    app.dock.show()
+  }
   const allWindows = BrowserWindow.getAllWindows()
   if (allWindows.length) {
     allWindows[0].focus()
   } else {
-    createWindow()
+    void createWindow()
   }
 })
 

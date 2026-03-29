@@ -8,6 +8,18 @@ export function dentryGamecodeU32(d: Buffer): number {
   return d.readUInt32BE(0)
 }
 
+/** Four-character game code from dentry (Nintendont-style .raw basename, e.g. GTME). */
+export function dentryGameCodeString(d: Buffer): string {
+  const b = d.subarray(0, 4)
+  let s = ''
+  for (let i = 0; i < 4; i++) {
+    const c = b[i]
+    if (c === undefined || c === 0) break
+    s += String.fromCharCode(c)
+  }
+  return s || 'UNK'
+}
+
 export function isDentryEmpty(d: Buffer): boolean {
   return dentryGamecodeU32(d) === 0xffffffff
 }

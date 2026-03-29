@@ -14,7 +14,10 @@
     "target": [
       "dmg",
       "zip"
-    ]
+    ],
+    "extendInfo": {
+      "NSUserNotificationUsageDescription": "Shows when an existing save on the SD card is backed up to backups/ and when a new .raw is copied from staging."
+    }
   },
   "win": {
     "target": [

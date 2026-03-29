@@ -3,7 +3,11 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import chokidar, { type FSWatcher } from 'chokidar'
 import { importGciIntoRaw, importGcisIntoRaw, scanGciFolderAgainstRaw } from './gcmemcard'
+import { runGciBatchBuild } from './gciBatchPipeline'
 import { mergeUserSettings, readUserSettings, type MemcardUserSettings } from './userSettings'
+import { peekPendingSdAll, removePendingByLocalPath } from './pendingSdQueue'
+import { copyLocalRawToSdSaves, isPathInsideRoot } from './sdTransfer'
+import { startVolumeWatcherMacos, stopVolumeWatcher } from './volumeWatcher'
 
 export type MemcardFolderEvent = {
   rootDir: string
@@ -12,8 +16,11 @@ export type MemcardFolderEvent = {
 }
 
 const watchers = new Map<string, FSWatcher>()
-const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
-const DEBOUNCE_MS = 400
+const folderUiTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const batchBuildTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const FOLDER_UI_DEBOUNCE_MS = 400
+
+let batchBuildRunning = false
 
 function broadcast(channel: string, payload: unknown) {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -21,17 +28,169 @@ function broadcast(channel: string, payload: unknown) {
   }
 }
 
-function debouncedEmit(rootDir: string, payload: MemcardFolderEvent) {
-  const key = rootDir
-  const prev = debounceTimers.get(key)
+function debouncedEmitFolder(rootDir: string, payload: MemcardFolderEvent) {
+  const prev = folderUiTimers.get(rootDir)
   if (prev) clearTimeout(prev)
-  debounceTimers.set(
-    key,
+  folderUiTimers.set(
+    rootDir,
     setTimeout(() => {
-      debounceTimers.delete(key)
+      folderUiTimers.delete(rootDir)
       broadcast('memcard:folder-changed', payload)
-    }, DEBOUNCE_MS),
+    }, FOLDER_UI_DEBOUNCE_MS),
   )
+}
+
+function scheduleAutoBatch(rootDir: string) {
+  void (async () => {
+    const s = await readUserSettings()
+    if (!s.autoBuildRaw || s.gciFolder !== rootDir) return
+    const prev = batchBuildTimers.get(rootDir)
+    if (prev) clearTimeout(prev)
+    const ms = Math.max(500, s.gciBatchDebounceMs)
+    batchBuildTimers.set(
+      rootDir,
+      setTimeout(() => {
+        batchBuildTimers.delete(rootDir)
+        void runBatchAndNotify(rootDir)
+      }, ms),
+    )
+  })()
+}
+
+async function runBatchAndNotify(rootDir: string) {
+  if (batchBuildRunning) return
+  const s = await readUserSettings()
+  if (s.gciFolder !== rootDir || !s.autoBuildRaw) return
+
+  batchBuildRunning = true
+  try {
+    const r = await runGciBatchBuild(s)
+    if (!r.ok) {
+      broadcast('memcard:batch-build-error', { error: r.error })
+      return
+    }
+    broadcast('memcard:batch-built', { outputs: r.outputs, errors: r.errors })
+  } finally {
+    batchBuildRunning = false
+  }
+}
+
+async function processSdTransfersForSavesDir(savesDir: string, s: MemcardUserSettings) {
+  if (!s.autoCopyToSd) return
+
+  const items = await peekPendingSdAll()
+  if (items.length === 0) return
+
+  for (const item of items) {
+    try {
+      await fs.access(item.localPath)
+    } catch {
+      await removePendingByLocalPath(item.localPath)
+      broadcast('memcard:sd-transfer-error', {
+        error: 'Staging file missing; removed from queue',
+        localPath: item.localPath,
+      })
+      continue
+    }
+
+    if (s.confirmBeforeSdCopy) {
+      const win = BrowserWindow.getFocusedWindow()
+      const boxOpts = {
+        type: 'question' as const,
+        message: `Copy ${item.fileName} to the SD card?`,
+        detail: `From:\n${item.localPath}\n\nTo:\n${path.join(savesDir, item.fileName)}`,
+        buttons: ['Copy', 'Skip'],
+        defaultId: 0,
+        cancelId: 1,
+      }
+      const { response } = win ? await dialog.showMessageBox(win, boxOpts) : await dialog.showMessageBox(boxOpts)
+      if (response === 1) continue
+    }
+
+    const r = await copyLocalRawToSdSaves({
+      localPath: item.localPath,
+      savesDir,
+      destFileName: item.fileName,
+      notify: process.platform === 'darwin',
+    })
+    if (r.ok) {
+      await removePendingByLocalPath(item.localPath)
+      broadcast('memcard:sd-transfer-done', { destPath: r.destPath, localPath: item.localPath })
+    } else {
+      broadcast('memcard:sd-transfer-error', { error: r.error, localPath: item.localPath })
+    }
+  }
+}
+
+async function tryProcessExistingVolumes() {
+  if (process.platform !== 'darwin') return
+  const s = await readUserSettings()
+  if (!s.autoCopyToSd) return
+  const names = await fs.readdir('/Volumes').catch(() => [])
+  for (const name of names) {
+    if (name.startsWith('.')) continue
+    const mountPath = path.join('/Volumes', name)
+    const savesDir = path.join(mountPath, s.nintendontSavesRelativePath)
+    try {
+      const st = await fs.stat(savesDir)
+      if (!st.isDirectory()) continue
+    } catch {
+      continue
+    }
+    if (!isPathInsideRoot(mountPath, savesDir)) continue
+    await processSdTransfersForSavesDir(savesDir, s)
+  }
+}
+
+function reconfigureVolumeWatcher() {
+  stopVolumeWatcher()
+  void (async () => {
+    const s = await readUserSettings()
+    startVolumeWatcherMacos({
+      nintendontSavesRelativePath: s.nintendontSavesRelativePath,
+      onMount: async (info) => {
+        if (!isPathInsideRoot(info.mountPath, info.savesDir)) return
+        broadcast('memcard:volume-mounted', {
+          mountPath: info.mountPath,
+          savesDir: info.savesDir,
+        })
+        const latest = await readUserSettings()
+        await processSdTransfersForSavesDir(info.savesDir, latest)
+      },
+      onUnmount: (mountPath) => {
+        broadcast('memcard:volume-unmounted', { mountPath })
+      },
+    })
+  })()
+}
+
+export async function startFolderWatch(rootDir: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!rootDir) return { ok: false, error: 'No path' }
+  const existing = watchers.get(rootDir)
+  if (existing) {
+    await existing.close()
+    watchers.delete(rootDir)
+  }
+  const w = chokidar.watch(rootDir, {
+    ignoreInitial: true,
+    ignored: (p) => path.basename(p).startsWith('.'),
+    awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
+  })
+  w.on('all', (eventKind, filePath) => {
+    debouncedEmitFolder(rootDir, { rootDir, eventKind, filePath })
+    scheduleAutoBatch(rootDir)
+  })
+  watchers.set(rootDir, w)
+  return { ok: true }
+}
+
+export async function resumeMemcardSession() {
+  const s = await readUserSettings()
+  if (s.gciFolder && s.folderWatchEnabled) {
+    await startFolderWatch(s.gciFolder)
+  }
+  reconfigureVolumeWatcher()
+  await tryProcessExistingVolumes()
 }
 
 export async function backupRawBeforeWrite(
@@ -83,22 +242,7 @@ export function registerMemcardIpc() {
   })
 
   ipcMain.handle('memcard:startWatch', async (_event, rootDir: string) => {
-    if (!rootDir) return { ok: false as const, error: 'No path' }
-    const existing = watchers.get(rootDir)
-    if (existing) {
-      await existing.close()
-      watchers.delete(rootDir)
-    }
-    const w = chokidar.watch(rootDir, {
-      ignoreInitial: true,
-      ignored: (p) => path.basename(p).startsWith('.'),
-      awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
-    })
-    w.on('all', (eventKind, filePath) => {
-      debouncedEmit(rootDir, { rootDir, eventKind, filePath })
-    })
-    watchers.set(rootDir, w)
-    return { ok: true as const }
+    return startFolderWatch(rootDir)
   })
 
   ipcMain.handle('memcard:stopWatch', async (_event, rootDir: string) => {
@@ -107,9 +251,12 @@ export function registerMemcardIpc() {
       await w.close()
       watchers.delete(rootDir)
     }
-    const t = debounceTimers.get(rootDir)
+    const t = folderUiTimers.get(rootDir)
     if (t) clearTimeout(t)
-    debounceTimers.delete(rootDir)
+    folderUiTimers.delete(rootDir)
+    const bt = batchBuildTimers.get(rootDir)
+    if (bt) clearTimeout(bt)
+    batchBuildTimers.delete(rootDir)
     return { ok: true as const }
   })
 
@@ -120,7 +267,10 @@ export function registerMemcardIpc() {
   ipcMain.handle('memcard:getUserSettings', async () => readUserSettings())
 
   ipcMain.handle('memcard:mergeUserSettings', async (_event, partial: Partial<MemcardUserSettings>) => {
-    return mergeUserSettings(partial)
+    const next = await mergeUserSettings(partial)
+    reconfigureVolumeWatcher()
+    await tryProcessExistingVolumes()
+    return next
   })
 
   ipcMain.handle(

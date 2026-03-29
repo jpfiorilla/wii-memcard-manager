@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="memcardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5c6bc0"/>
+      <stop offset="45%" stop-color="#7e57c2"/>
+      <stop offset="100%" stop-color="#ab47bc"/>
+    </linearGradient>
+    <linearGradient id="smashGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffd54f"/>
+      <stop offset="100%" stop-color="#ff7043"/>
+    </linearGradient>
+    <mask id="label-window">
+      <rect width="64" height="64" fill="white"/>
+      <circle cx="32" cy="40" r="9.5" fill="black"/>
+    </mask>
+  </defs>
+  <g mask="url(#label-window)">
+    <rect x="22" y="6" width="20" height="15" rx="3" fill="url(#memcardGrad)"/>
+    <rect x="14" y="18" width="36" height="40" rx="5" fill="url(#memcardGrad)"/>
+  </g>
+  <path
+    fill="url(#smashGrad)"
+    d="M32.8 32.5 L28.2 39.8 L30.8 39.8 L28.5 45.5 L35.2 37.2 L32.2 37.2 L34.5 32.5 Z"
+  />
+</svg>

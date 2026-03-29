@@ -16,6 +16,13 @@ import {
   CircularProgress,
   Tooltip,
   useMediaQuery,
+  Switch,
+  TextField,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  IconButton,
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
@@ -24,6 +31,7 @@ import RefreshIcon from '@mui/icons-material/Refresh'
 import SelectAllIcon from '@mui/icons-material/SelectAll'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
+import SettingsIcon from '@mui/icons-material/Settings'
 import { useSnackbar } from 'notistack'
 import { MAX_CARD_DIRECTORY_FILES } from './constants/card'
 
@@ -45,6 +53,7 @@ type CardScanStats = {
 export default function App() {
   const theme = useTheme()
   const isNarrow = useMediaQuery(theme.breakpoints.down('md'))
+  const isXs = useMediaQuery(theme.breakpoints.down('sm'))
   const { enqueueSnackbar } = useSnackbar()
   const [gciFolder, setGciFolder] = useState<string | null>(null)
   const [rawPath, setRawPath] = useState<string | null>(null)
@@ -60,6 +69,16 @@ export default function App() {
   /** Every .gci path seen on the previous successful scan (any status). */
   const previousPathsRef = useRef<Set<string>>(new Set())
   const scanDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const [pipeline, setPipeline] = useState({
+    stagingDir: null as string | null,
+    gciBatchDebounceMs: 4000,
+    nintendontSavesRelativePath: 'nintendont/saves',
+    autoBuildRaw: true,
+    autoCopyToSd: true,
+    confirmBeforeSdCopy: false,
+  })
+  const [pipelineSettingsOpen, setPipelineSettingsOpen] = useState(false)
 
   useEffect(() => {
     lastImportableRef.current = new Set()
@@ -102,6 +121,14 @@ export default function App() {
             next.add(p)
           }
         }
+        for (const e of r.entries) {
+          if (e.parseError || !e.alreadyOnCard) continue
+          const p = e.path
+          const brandNewInFolder = !prevPaths.has(p)
+          if (brandNewInFolder || prev.has(p)) {
+            next.add(p)
+          }
+        }
         lastImportableRef.current = importable
         previousPathsRef.current = new Set(r.entries.map((e) => e.path))
         return next
@@ -119,9 +146,16 @@ export default function App() {
       if (s.gciFolder) setGciFolder(s.gciFolder)
       if (s.rawPath) setRawPath(s.rawPath)
       if (s.gciFolder && s.folderWatchEnabled) {
-        const r = await window.memcard.startWatch(s.gciFolder)
-        if (!cancelled && r?.ok) setWatching(true)
+        setWatching(true)
       }
+      setPipeline({
+        stagingDir: s.stagingDir,
+        gciBatchDebounceMs: s.gciBatchDebounceMs,
+        nintendontSavesRelativePath: s.nintendontSavesRelativePath,
+        autoBuildRaw: s.autoBuildRaw,
+        autoCopyToSd: s.autoCopyToSd,
+        confirmBeforeSdCopy: s.confirmBeforeSdCopy,
+      })
     })()
     return () => {
       cancelled = true
@@ -133,6 +167,43 @@ export default function App() {
       console.log('[main]', msg)
     })
   }, [])
+
+  useEffect(() => {
+    const u1 = window.memcard.onBatchBuilt(({ outputs, errors }) => {
+      if (outputs.length > 0) {
+        enqueueSnackbar(
+          `Built ${outputs.length} memory card image(s): ${outputs.map((o) => o.gameCode).join(', ')}`,
+          { variant: 'success' },
+        )
+      }
+      for (const err of errors) {
+        enqueueSnackbar(err, { variant: 'warning' })
+      }
+    })
+    const u2 = window.memcard.onBatchBuildError(({ error }) => {
+      enqueueSnackbar(`Auto-build failed: ${error}`, { variant: 'error' })
+    })
+    const u3 = window.memcard.onVolumeMounted(({ mountPath, savesDir }) => {
+      enqueueSnackbar(`SD / volume ready: ${mountPath} → ${savesDir}`, { variant: 'info' })
+    })
+    const u4 = window.memcard.onVolumeUnmounted(({ mountPath }) => {
+      enqueueSnackbar(`Volume ejected: ${mountPath}`, { variant: 'default' })
+    })
+    const u5 = window.memcard.onSdTransferDone(({ destPath }) => {
+      enqueueSnackbar(`Copied to SD: ${destPath}`, { variant: 'success' })
+    })
+    const u6 = window.memcard.onSdTransferError(({ error, localPath }) => {
+      enqueueSnackbar(`SD copy failed (${localPath}): ${error}`, { variant: 'error' })
+    })
+    return () => {
+      u1()
+      u2()
+      u3()
+      u4()
+      u5()
+      u6()
+    }
+  }, [enqueueSnackbar])
 
   useEffect(() => {
     void runScan()
@@ -174,6 +245,18 @@ export default function App() {
     setRawPath(p)
     await window.memcard.mergeUserSettings({ rawPath: p })
     enqueueSnackbar(`Output .raw: ${p}`, { variant: 'success' })
+  }
+
+  const updatePipeline = useCallback(async (partial: Partial<typeof pipeline>) => {
+    setPipeline((p) => ({ ...p, ...partial }))
+    await window.memcard.mergeUserSettings(partial)
+  }, [])
+
+  const pickStagingDir = async () => {
+    const p = await window.memcard.pickDirectory(pipeline.stagingDir)
+    if (!p) return
+    await updatePipeline({ stagingDir: p })
+    enqueueSnackbar(`Staging folder: ${p}`, { variant: 'success' })
   }
 
   const togglePath = (path: string, checked: boolean) => {
@@ -252,6 +335,10 @@ export default function App() {
     (c) => selectedPaths.has(c.path) && !c.alreadyOnCard && !c.parseError,
   )
 
+  const selectedOnCardSummary = candidates.filter(
+    (c) => selectedPaths.has(c.path) && c.alreadyOnCard && !c.parseError,
+  )
+
   const hasImportable = candidates.some((c) => !c.parseError && !c.alreadyOnCard)
 
   const selectionInvalidReason = useMemo(() => {
@@ -313,22 +400,159 @@ export default function App() {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', p: { xs: 2, sm: 3 }, pb: 10 }}>
-      <Typography
-        variant="h5"
-        gutterBottom
-        sx={{
-          background:
-            'linear-gradient(102deg, #ffffff 0%, #d4c4f0 22%, #b19cd9 38%, #ff1493 58%, #7ee8ff 100%)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          backgroundClip: 'text',
-          filter: 'drop-shadow(0 0 18px rgba(255, 20, 147, 0.45)) drop-shadow(0 0 28px rgba(177, 156, 217, 0.25))',
-        }}
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={2}
+        alignItems={{ xs: 'stretch', sm: 'flex-start' }}
+        justifyContent="space-between"
+        sx={{ mb: 1 }}
       >
-        Wii Memcard Manager
-      </Typography>
+        <Typography
+          variant="h5"
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            mb: 0,
+            background:
+              'linear-gradient(102deg, #ffffff 0%, #d4c4f0 22%, #b19cd9 38%, #ff1493 58%, #7ee8ff 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            filter:
+              'drop-shadow(0 0 18px rgba(255, 20, 147, 0.45)) drop-shadow(0 0 28px rgba(177, 156, 217, 0.25))',
+          }}
+        >
+          Wii Memcard Manager
+        </Typography>
+        <Stack
+          direction="row"
+          spacing={0.5}
+          alignItems="center"
+          justifyContent={{ xs: 'stretch', sm: 'flex-end' }}
+          sx={{ flexShrink: 0 }}
+        >
+          <Tooltip title="Background pipeline (macOS SD) — staging, auto-build, SD copy">
+            <IconButton
+              color="inherit"
+              size="large"
+              onClick={() => setPipelineSettingsOpen(true)}
+              aria-label="Open background pipeline settings"
+            >
+              <SettingsIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={selectionInvalidReason ?? ''} disableHoverListener={!selectionInvalidReason}>
+            <Box component="span" sx={{ flex: { xs: 1, sm: 'none' }, minWidth: 0 }}>
+              <Button
+                fullWidth={isXs}
+                size="large"
+                variant="contained"
+                color="primary"
+                onClick={() => void importSelected()}
+                disabled={importDisabled}
+                sx={{ py: 1.25, px: 2.5, fontSize: '1.05rem', fontWeight: 700, minWidth: { sm: 220 } }}
+              >
+                {selectedImportCount > 0
+                  ? `Import ${selectedImportCount} into .raw`
+                  : 'Import into .raw'}
+              </Button>
+            </Box>
+          </Tooltip>
+        </Stack>
+      </Stack>
+
+      <Dialog
+        open={pipelineSettingsOpen}
+        onClose={() => setPipelineSettingsOpen(false)}
+        fullWidth
+        maxWidth="sm"
+        aria-labelledby="pipeline-settings-title"
+      >
+        <DialogTitle id="pipeline-settings-title">Background pipeline (macOS SD)</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Optional automation. After a quiet period in the watched folder, new saves are merged into staging{' '}
+            <code>.raw</code> files (one per game code). When a volume with <code>nintendont/saves</code> appears,
+            pending images copy there (existing files go to <code>backups/</code> on the SD first).
+          </Typography>
+          <Stack spacing={1.5}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} flexWrap="wrap">
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<FolderOpenIcon />}
+                onClick={() => void pickStagingDir()}
+              >
+                Staging folder
+              </Button>
+              <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-all', flex: 1 }}>
+                {pipeline.stagingDir ?? 'Default: app data / staging'}
+              </Typography>
+            </Stack>
+            <TextField
+              label="Quiet period before build (ms)"
+              type="number"
+              size="small"
+              sx={{ maxWidth: 280 }}
+              value={pipeline.gciBatchDebounceMs}
+              onChange={(e) =>
+                setPipeline((p) => ({ ...p, gciBatchDebounceMs: Number(e.target.value) || 4000 }))
+              }
+              onBlur={(e) => {
+                const n = Number(e.target.value)
+                if (Number.isFinite(n) && n >= 500) void updatePipeline({ gciBatchDebounceMs: n })
+              }}
+            />
+            <TextField
+              label="Path on SD (relative to volume)"
+              size="small"
+              fullWidth
+              value={pipeline.nintendontSavesRelativePath}
+              onChange={(e) => setPipeline((p) => ({ ...p, nintendontSavesRelativePath: e.target.value }))}
+              onBlur={(e) => void updatePipeline({ nintendontSavesRelativePath: e.target.value })}
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={pipeline.autoBuildRaw}
+                  onChange={(_, v) => void updatePipeline({ autoBuildRaw: v })}
+                  size="small"
+                />
+              }
+              label="Auto-build .raw from new GCIs (when Watch is on)"
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={pipeline.autoCopyToSd}
+                  onChange={(_, v) => void updatePipeline({ autoCopyToSd: v })}
+                  size="small"
+                />
+              }
+              label="Auto-copy staging images to SD when mounted"
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={pipeline.confirmBeforeSdCopy}
+                  onChange={(_, v) => void updatePipeline({ confirmBeforeSdCopy: v })}
+                  size="small"
+                />
+              }
+              label="Confirm each file before SD copy (dialog)"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button variant="contained" onClick={() => setPipelineSettingsOpen(false)}>
+            Done
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2, maxWidth: 720 }}>
-        Add saves from a synced or export folder into your Nintendont <code>.raw</code>. Before each write, the
+        Add saves from a synced or export folder into your Nintendont <code>.raw</code>. With <strong>Watch</strong>{' '}
+        enabled, new <code>.gci</code> files can be batched into fresh card images and copied to the SD when you plug
+        it in (macOS). Manual import still writes into the chosen target <code>.raw</code>. Before each write, the
         current card file is copied to <code>backups/</code> beside it.
       </Typography>
 
@@ -451,23 +675,6 @@ export default function App() {
         }}
       >
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="stretch">
-          <Tooltip title={selectionInvalidReason ?? ''} disableHoverListener={!selectionInvalidReason}>
-            <Box component="span" sx={{ flex: { sm: 1 }, width: '100%', display: 'inline-flex' }}>
-              <Button
-                fullWidth
-                size="large"
-                variant="contained"
-                color="primary"
-                onClick={() => void importSelected()}
-                disabled={importDisabled}
-                sx={{ py: 1.5, fontSize: '1.05rem', fontWeight: 700 }}
-              >
-                {selectedImportCount > 0
-                  ? `Import ${selectedImportCount} into .raw`
-                  : 'Import into .raw'}
-              </Button>
-            </Box>
-          </Tooltip>
           <Button
             variant="outlined"
             startIcon={<RefreshIcon />}
@@ -517,8 +724,9 @@ export default function App() {
             Saves in folder
           </Typography>
           <Typography variant="caption" display="block" color="text.secondary" sx={{ mb: 1.5 }}>
-            Newest files first (by modified time). New saves not yet on the card are checked by default; uncheck to
-            skip.
+            Newest files first (by modified time). New saves are checked to stage for import; saves already on the
+            .raw show a green check — uncheck any row to remove it from the staged list (imports only run for new
+            saves).
           </Typography>
 
           {!scanning && gciFolder && rawPath && candidates.length === 0 && (
@@ -536,32 +744,49 @@ export default function App() {
           {candidates.length > 0 && (
             <FormGroup>
               {candidates.map((c) => {
-                const canImport = !c.parseError && !c.alreadyOnCard
-                const checked = canImport && selectedPaths.has(c.path)
-                return (
-                  <FormControlLabel
-                    key={c.path}
-                    control={
-                      <Checkbox
-                        checked={checked}
-                        disabled={!canImport}
-                        onChange={(_, v) => togglePath(c.path, v)}
-                        size="small"
-                      />
-                    }
-                    label={
-                      <Box>
-                        <Typography variant="body2" component="span" sx={{ wordBreak: 'break-all' }}>
-                          {c.saveName || c.fileName}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" display="block">
-                          {c.fileName}
-                          {c.parseError && ` — ${c.parseError}`}
-                          {c.alreadyOnCard && !c.parseError && ' — already on card'}
-                        </Typography>
-                      </Box>
-                    }
+                const canToggle = !c.parseError
+                const checked = canToggle && selectedPaths.has(c.path)
+                const rowLabel = (
+                  <Box>
+                    <Typography variant="body2" component="span" sx={{ wordBreak: 'break-all' }}>
+                      {c.saveName || c.fileName}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {c.fileName}
+                      {c.parseError && ` — ${c.parseError}`}
+                      {c.alreadyOnCard && !c.parseError && ' — already on this .raw'}
+                    </Typography>
+                  </Box>
+                )
+                const checkbox = (
+                  <Checkbox
+                    checked={checked}
+                    disabled={!canToggle}
+                    onChange={(_, v) => togglePath(c.path, v)}
+                    size="small"
+                    color={c.alreadyOnCard && checked ? 'success' : 'primary'}
                   />
+                )
+                return (
+                  <Tooltip
+                    key={c.path}
+                    title={
+                      c.alreadyOnCard && !c.parseError
+                        ? 'This save is already on the loaded .raw. Uncheck to drop it from the staged list for the next write.'
+                        : ''
+                    }
+                    disableHoverListener={!c.alreadyOnCard || !!c.parseError}
+                  >
+                    <FormControlLabel
+                      control={checkbox}
+                      label={rowLabel}
+                      sx={{
+                        alignItems: 'flex-start',
+                        ml: 0,
+                        '& .MuiFormControlLabel-label': { pt: 0.25 },
+                      }}
+                    />
+                  </Tooltip>
                 )
               })}
             </FormGroup>
@@ -590,28 +815,59 @@ export default function App() {
               Current card: {cardStats.directoryFileCount} save(s), {cardStats.freeBlocks} block(s) free.
             </Typography>
           )}
-          {selectedImportCount === 0 ? (
+          {selectedImportCount === 0 && selectedOnCardSummary.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
-              Select one or more saves in the list. The count and names of what will be written appear here.
+              Select one or more saves in the list. New imports and saves already on the card appear here when
+              checked.
             </Typography>
           ) : (
             <>
-              <Typography variant="h6" color="primary.light" sx={{ mb: 1 }}>
-                {selectedImportCount} save{selectedImportCount === 1 ? '' : 's'} staged
-              </Typography>
-              <List dense disablePadding sx={{ maxHeight: 220, overflow: 'auto' }}>
-                {selectedForSummary.slice(0, 12).map((c) => (
-                  <ListItem key={c.path} disableGutters sx={{ py: 0.25, display: 'block' }}>
-                    <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-                      {c.saveName || c.fileName}
+              {selectedImportCount > 0 && (
+                <>
+                  <Typography variant="h6" color="primary.light" sx={{ mb: 1 }}>
+                    {selectedImportCount} save{selectedImportCount === 1 ? '' : 's'} staged for import
+                  </Typography>
+                  <List dense disablePadding sx={{ maxHeight: 220, overflow: 'auto' }}>
+                    {selectedForSummary.slice(0, 12).map((c) => (
+                      <ListItem key={c.path} disableGutters sx={{ py: 0.25, display: 'block' }}>
+                        <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
+                          {c.saveName || c.fileName}
+                        </Typography>
+                      </ListItem>
+                    ))}
+                  </List>
+                  {selectedForSummary.length > 12 && (
+                    <Typography variant="caption" color="text.secondary">
+                      +{selectedForSummary.length - 12} more
                     </Typography>
-                  </ListItem>
-                ))}
-              </List>
-              {selectedForSummary.length > 12 && (
-                <Typography variant="caption" color="text.secondary">
-                  +{selectedForSummary.length - 12} more
-                </Typography>
+                  )}
+                </>
+              )}
+              {selectedOnCardSummary.length > 0 && (
+                <>
+                  <Typography
+                    variant="caption"
+                    color="success.main"
+                    display="block"
+                    sx={{ mb: 0.75, ...(selectedImportCount > 0 ? { mt: 2 } : {}) }}
+                  >
+                    Already on this .raw (green check in list — uncheck to drop from staged)
+                  </Typography>
+                  <List dense disablePadding sx={{ maxHeight: 160, overflow: 'auto' }}>
+                    {selectedOnCardSummary.slice(0, 8).map((c) => (
+                      <ListItem key={c.path} disableGutters sx={{ py: 0.25, display: 'block' }}>
+                        <Typography variant="body2" sx={{ wordBreak: 'break-all', opacity: 0.92 }}>
+                          {c.saveName || c.fileName}
+                        </Typography>
+                      </ListItem>
+                    ))}
+                  </List>
+                  {selectedOnCardSummary.length > 8 && (
+                    <Typography variant="caption" color="text.secondary">
+                      +{selectedOnCardSummary.length - 8} more
+                    </Typography>
+                  )}
+                </>
               )}
             </>
           )}

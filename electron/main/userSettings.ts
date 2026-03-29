@@ -23,6 +23,8 @@ export type MemcardUserSettings = {
   confirmBeforeSdCopy: boolean
   /** Only treat volumes with this path as Wii SD targets (reduces false copies). */
   requireNintendontPath: boolean
+  /** Normalize dentry filenames when importing GCIs onto a card. */
+  gciFilenameSanitize: 'none' | 'ascii-title' | 'ascii-upper' | 'ascii-lower' | 'tmce-short'
 }
 
 const defaults: MemcardUserSettings = {
@@ -37,6 +39,7 @@ const defaults: MemcardUserSettings = {
   autoCopyToSd: true,
   confirmBeforeSdCopy: false,
   requireNintendontPath: true,
+  gciFilenameSanitize: 'none',
 }
 
 function filePath(): string {
@@ -63,6 +66,8 @@ function merge(a: MemcardUserSettings, partial: Partial<MemcardUserSettings>): M
       partial.confirmBeforeSdCopy !== undefined ? partial.confirmBeforeSdCopy : a.confirmBeforeSdCopy,
     requireNintendontPath:
       partial.requireNintendontPath !== undefined ? partial.requireNintendontPath : a.requireNintendontPath,
+    gciFilenameSanitize:
+      partial.gciFilenameSanitize !== undefined ? partial.gciFilenameSanitize : a.gciFilenameSanitize,
   }
 }
 
@@ -90,6 +95,14 @@ export async function readUserSettings(): Promise<MemcardUserSettings> {
         typeof parsed.confirmBeforeSdCopy === 'boolean' ? parsed.confirmBeforeSdCopy : defaults.confirmBeforeSdCopy,
       requireNintendontPath:
         typeof parsed.requireNintendontPath === 'boolean' ? parsed.requireNintendontPath : defaults.requireNintendontPath,
+      gciFilenameSanitize:
+        parsed.gciFilenameSanitize === 'ascii-title' ||
+        parsed.gciFilenameSanitize === 'ascii-upper' ||
+        parsed.gciFilenameSanitize === 'ascii-lower' ||
+        parsed.gciFilenameSanitize === 'tmce-short' ||
+        parsed.gciFilenameSanitize === 'none'
+          ? parsed.gciFilenameSanitize
+          : defaults.gciFilenameSanitize,
     })
   } catch {
     return { ...defaults }

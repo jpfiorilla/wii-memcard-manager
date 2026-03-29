@@ -2,10 +2,18 @@ import { BrowserWindow, dialog, ipcMain } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import chokidar, { type FSWatcher } from 'chokidar'
-import { importGciIntoRaw, importGcisIntoRaw, scanGciFolderAgainstRaw, syncFolderSelectionToRaw } from './gcmemcard'
+import {
+  describeGciDentry,
+  importGciIntoRaw,
+  importGcisIntoRaw,
+  parseGciFile,
+  scanGciFolderAgainstRaw,
+  syncFolderSelectionToRaw,
+} from './gcmemcard'
 import { runGciBatchBuild } from './gciBatchPipeline'
 import { mergeUserSettings, readUserSettings, type MemcardUserSettings } from './userSettings'
 import { peekPendingSdAll, removePendingByLocalPath } from './pendingSdQueue'
+import { showMemcardNotification } from './notifications'
 import { copyLocalRawToSdSaves, isPathInsideRoot } from './sdTransfer'
 import { startVolumeWatcherMacos, stopVolumeWatcher } from './volumeWatcher'
 
@@ -70,13 +78,20 @@ async function runBatchAndNotify(rootDir: string) {
       return
     }
     broadcast('memcard:batch-built', { outputs: r.outputs, errors: r.errors })
+    await processPendingSdOnAllVolumes({ notifyEachCopy: false })
+    await notifyAfterBatchPipelineMacos(r.outputs, r.errors)
   } finally {
     batchBuildRunning = false
   }
 }
 
-async function processSdTransfersForSavesDir(savesDir: string, s: MemcardUserSettings) {
+async function processSdTransfersForSavesDir(
+  savesDir: string,
+  s: MemcardUserSettings,
+  opts?: { notifyEachCopy?: boolean },
+) {
   if (!s.autoCopyToSd) return
+  const notifyEachCopy = opts?.notifyEachCopy !== false
 
   const items = await peekPendingSdAll()
   if (items.length === 0) return
@@ -111,7 +126,7 @@ async function processSdTransfersForSavesDir(savesDir: string, s: MemcardUserSet
       localPath: item.localPath,
       savesDir,
       destFileName: item.fileName,
-      notify: process.platform === 'darwin',
+      notify: notifyEachCopy && process.platform === 'darwin',
     })
     if (r.ok) {
       await removePendingByLocalPath(item.localPath)
@@ -122,7 +137,8 @@ async function processSdTransfersForSavesDir(savesDir: string, s: MemcardUserSet
   }
 }
 
-async function tryProcessExistingVolumes() {
+/** Copy pending staging .raw files to any mounted SD that exposes `nintendont/saves` (or configured path). */
+async function processPendingSdOnAllVolumes(opts?: { notifyEachCopy?: boolean }) {
   if (process.platform !== 'darwin') return
   const s = await readUserSettings()
   if (!s.autoCopyToSd) return
@@ -138,8 +154,72 @@ async function tryProcessExistingVolumes() {
       continue
     }
     if (!isPathInsideRoot(mountPath, savesDir)) continue
-    await processSdTransfersForSavesDir(savesDir, s)
+    await processSdTransfersForSavesDir(savesDir, s, opts)
   }
+}
+
+async function notifySdVolumeMountedMacos(latest: MemcardUserSettings, volName: string) {
+  if (process.platform !== 'darwin') return
+  const savesRel = latest.nintendontSavesRelativePath
+  if (!latest.autoCopyToSd) {
+    showMemcardNotification(
+      'SD volume detected',
+      `${volName} — ${savesRel} found. Auto-copy to SD is off (change in Settings to transfer).`,
+    )
+    return
+  }
+  const pending = await peekPendingSdAll()
+  if (pending.length === 0) {
+    showMemcardNotification(
+      'SD card synced',
+      `${volName} — ${savesRel} found. No pending files; already up to date.`,
+    )
+    return
+  }
+  showMemcardNotification(
+    'SD volume ready',
+    `${volName} — copying ${pending.length} pending file(s) to the card…`,
+  )
+}
+
+function notifyVolumeUnmountedMacos(mountPath: string) {
+  if (process.platform !== 'darwin') return
+  showMemcardNotification('Volume ejected', `${path.basename(mountPath)} was unmounted.`)
+}
+
+async function notifyAfterBatchPipelineMacos(
+  outputs: { path: string; gameCode: string }[],
+  errors: string[],
+) {
+  if (process.platform !== 'darwin') return
+  if (errors.length > 0) {
+    const msg = errors.slice(0, 3).join(' · ')
+    showMemcardNotification('Batch build: issues', msg + (errors.length > 3 ? '…' : ''))
+  }
+  if (outputs.length === 0) return
+
+  const s = await readUserSettings()
+  const codes = outputs.map((o) => o.gameCode).join(', ')
+  const pending = await peekPendingSdAll()
+
+  if (!s.autoCopyToSd) {
+    showMemcardNotification(
+      'Staging .raw built',
+      `${codes} — saved to staging. Turn on auto-copy to SD in Settings to copy to the card.`,
+    )
+    return
+  }
+  if (pending.length === 0) {
+    showMemcardNotification(
+      'Memory card ready',
+      `${codes} — copied to SD (nintendont/saves).`,
+    )
+    return
+  }
+  showMemcardNotification(
+    'Staging .raw built',
+    `${codes} — ${pending.length} file(s) still queued (insert SD or check ${s.nintendontSavesRelativePath}).`,
+  )
 }
 
 function reconfigureVolumeWatcher() {
@@ -155,10 +235,13 @@ function reconfigureVolumeWatcher() {
           savesDir: info.savesDir,
         })
         const latest = await readUserSettings()
+        const volName = path.basename(info.mountPath)
+        await notifySdVolumeMountedMacos(latest, volName)
         await processSdTransfersForSavesDir(info.savesDir, latest)
       },
       onUnmount: (mountPath) => {
         broadcast('memcard:volume-unmounted', { mountPath })
+        notifyVolumeUnmountedMacos(mountPath)
       },
     })
   })()
@@ -190,7 +273,7 @@ export async function resumeMemcardSession() {
     await startFolderWatch(s.gciFolder)
   }
   reconfigureVolumeWatcher()
-  await tryProcessExistingVolumes()
+  await processPendingSdOnAllVolumes()
 }
 
 export async function backupRawBeforeWrite(
@@ -269,7 +352,7 @@ export function registerMemcardIpc() {
   ipcMain.handle('memcard:mergeUserSettings', async (_event, partial: Partial<MemcardUserSettings>) => {
     const next = await mergeUserSettings(partial)
     reconfigureVolumeWatcher()
-    await tryProcessExistingVolumes()
+    await processPendingSdOnAllVolumes()
     return next
   })
 
@@ -290,7 +373,8 @@ export function registerMemcardIpc() {
           error: 'Target .raw does not exist; choose an existing memory card file first.',
         }
       }
-      return importGciIntoRaw(rawPath, gciPath)
+      const s = await readUserSettings()
+      return importGciIntoRaw(rawPath, gciPath, { gciFilenameSanitize: s.gciFilenameSanitize })
     },
   )
 
@@ -322,9 +406,28 @@ export function registerMemcardIpc() {
           error: 'Target .raw does not exist; choose an existing memory card file first.',
         }
       }
-      return importGcisIntoRaw(rawPath, gciPaths)
+      const s = await readUserSettings()
+      return importGcisIntoRaw(rawPath, gciPaths, { gciFilenameSanitize: s.gciFilenameSanitize })
     },
   )
+
+  ipcMain.handle('memcard:describeGci', async (_event, gciPath: string) => {
+    if (!gciPath) {
+      return { ok: false as const, error: 'Missing GCI path' }
+    }
+    let buf: Buffer
+    try {
+      buf = await fs.readFile(gciPath)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return { ok: false as const, error: msg }
+    }
+    const gci = parseGciFile(buf)
+    if (!gci.ok) {
+      return { ok: false as const, error: gci.error }
+    }
+    return { ok: true as const, description: describeGciDentry(gci.value.dentry) }
+  })
 
   ipcMain.handle(
     'memcard:syncFolderSelection',

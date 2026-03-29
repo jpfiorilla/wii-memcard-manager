@@ -5,6 +5,8 @@ import type { MemcardResultCode } from './constants'
 import { gcTimestampSecondsFromUnixMs } from './gcTime'
 import { parseGciFile } from './gci'
 import { MemcardImage } from './memcardImage'
+import { prepareDentryForImport } from './gciWriteMiddleware'
+import type { GciFilenameSanitizeStyle } from './gciWriteMiddleware'
 
 export { MemcardImage } from './memcardImage'
 export type { GciFolderEntry, GciFolderScanCardStats } from './scan'
@@ -13,7 +15,24 @@ export { formatEmptyCard, createEmptyMemcard } from './format'
 export { parseGciFile } from './gci'
 export type { ParsedGci } from './gci'
 export type { MemcardResultCode } from './constants'
+export { DENTRY_STRLEN, GCI_FILENAME_TMCE_MAX_BYTES } from './constants'
 export { GC_CARD_TIME_EPOCH_UNIX_SECONDS, gcTimestampSecondsFromUnixMs } from './gcTime'
+export type { GciFilenameSanitizeStyle } from './gciWriteMiddleware'
+export {
+  clampGciFilenameLatin1,
+  normalizeGciFilenameAscii,
+  normalizeGciFilenameTmceShort,
+  prepareDentryForImport,
+} from './gciWriteMiddleware'
+export type { GciDentryDescription } from './gciCharacterHints'
+export { describeGciDentry } from './gciCharacterHints'
+export {
+  canonicalShortSlugForMeleeId,
+  MELEE_CHARACTER_LABEL,
+  MELEE_CHARACTER_SHORT_SLUG,
+  MeleeExternalCharacterId,
+  meleeCharacterIdFromSlug,
+} from './meleeCharacterIds'
 
 function resultMessage(code: MemcardResultCode): string {
   switch (code) {
@@ -45,6 +64,11 @@ function resultMessage(code: MemcardResultCode): string {
 export type ImportIntoRawOptions = {
   /** When GCI dentry m_time is 0, use this GC seconds-since-2000 (otherwise current time). */
   mTimeGcSeconds?: number
+  /**
+   * Normalize the dentry filename before writing. `none` leaves bytes as in the file.
+   * Changing names can break some games if save data references the dentry string.
+   */
+  gciFilenameSanitize?: GciFilenameSanitizeStyle
 }
 
 /**
@@ -64,6 +88,7 @@ export async function importGcisIntoMemcard(
       opts?.mTimeGcSeconds !== undefined
         ? opts.mTimeGcSeconds
         : gcTimestampSecondsFromUnixMs(Date.now()),
+    gciFilenameSanitize: opts?.gciFilenameSanitize,
   }
 
   for (const gciPath of gciPaths) {
@@ -80,13 +105,86 @@ export async function importGcisIntoMemcard(
       return { ok: false, error: `${path.basename(gciPath)}: ${gci.error}` }
     }
 
-    const code = card.importSave(gci.value.dentry, gci.value.blocks, resolved)
+    const dentry = prepareDentryForImport(gci.value.dentry, resolved)
+    const code = card.importSave(dentry, gci.value.blocks, resolved)
     if (code !== 'SUCCESS') {
       return { ok: false, error: `${path.basename(gciPath)}: ${resultMessage(code)}` }
     }
   }
 
   return { ok: true }
+}
+
+/**
+ * Import GCIs in order (caller should pass newest-first). Imports until the card runs out of
+ * directory slots or blocks; skips duplicate titles; stops when no more saves fit.
+ * Use for auto-batch builds so one oversized or duplicate file does not abort the whole card.
+ */
+export async function importGcisIntoMemcardGreedy(
+  card: MemcardImage,
+  gciPaths: string[],
+  opts?: ImportIntoRawOptions,
+): Promise<
+  | { ok: true; importedPaths: string[]; warnings: string[] }
+  | { ok: false; error: string }
+> {
+  if (gciPaths.length === 0) {
+    return { ok: true, importedPaths: [], warnings: [] }
+  }
+
+  const resolved: ImportIntoRawOptions = {
+    mTimeGcSeconds:
+      opts?.mTimeGcSeconds !== undefined
+        ? opts.mTimeGcSeconds
+        : gcTimestampSecondsFromUnixMs(Date.now()),
+    gciFilenameSanitize: opts?.gciFilenameSanitize,
+  }
+
+  const importedPaths: string[] = []
+  const warnings: string[] = []
+
+  for (const gciPath of gciPaths) {
+    let gciBuf: Buffer
+    try {
+      gciBuf = await fs.readFile(gciPath)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return { ok: false, error: `${path.basename(gciPath)}: ${msg}` }
+    }
+
+    const gci = parseGciFile(gciBuf)
+    if (!gci.ok) {
+      return { ok: false, error: `${path.basename(gciPath)}: ${gci.error}` }
+    }
+
+    const dentry = prepareDentryForImport(gci.value.dentry, resolved)
+    const code = card.importSave(dentry, gci.value.blocks, resolved)
+    if (code === 'SUCCESS') {
+      importedPaths.push(gciPath)
+      continue
+    }
+    if (code === 'OUTOFBLOCKS' || code === 'OUTOFDIRENTRIES') {
+      warnings.push(
+        `${path.basename(gciPath)}: ${resultMessage(code)} (card full — remaining files not added)`,
+      )
+      break
+    }
+    if (code === 'TITLEPRESENT') {
+      warnings.push(`${path.basename(gciPath)}: ${resultMessage(code)} (skipped)`)
+      continue
+    }
+    return { ok: false, error: `${path.basename(gciPath)}: ${resultMessage(code)}` }
+  }
+
+  if (importedPaths.length === 0) {
+    const hint =
+      warnings.length > 0
+        ? warnings.join(' ')
+        : 'No saves could be imported onto an empty card'
+    return { ok: false, error: hint }
+  }
+
+  return { ok: true, importedPaths, warnings }
 }
 
 /**
@@ -183,8 +281,10 @@ export async function importGciIntoRaw(
       opts?.mTimeGcSeconds !== undefined
         ? opts.mTimeGcSeconds
         : gcTimestampSecondsFromUnixMs(Date.now()),
+    gciFilenameSanitize: opts?.gciFilenameSanitize,
   }
-  const code = card.importSave(gci.value.dentry, gci.value.blocks, resolved)
+  const dentry = prepareDentryForImport(gci.value.dentry, resolved)
+  const code = card.importSave(dentry, gci.value.blocks, resolved)
   if (code !== 'SUCCESS') {
     return { ok: false, error: resultMessage(code) }
   }

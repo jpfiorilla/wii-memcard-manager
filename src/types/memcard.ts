@@ -13,6 +13,13 @@ export type CardScanStats = {
   freeBlocks: number
 }
 
+export type GciFilenameSanitizeStyle =
+  | 'none'
+  | 'ascii-title'
+  | 'ascii-upper'
+  | 'ascii-lower'
+  | 'tmce-short'
+
 export type PipelineSettingsState = {
   stagingDir: string | null
   gciBatchDebounceMs: number
@@ -20,4 +27,5 @@ export type PipelineSettingsState = {
   autoBuildRaw: boolean
   autoCopyToSd: boolean
   confirmBeforeSdCopy: boolean
+  gciFilenameSanitize: GciFilenameSanitizeStyle
 }

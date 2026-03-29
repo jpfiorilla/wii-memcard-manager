@@ -4,6 +4,7 @@ import { MAX_CARD_DIRECTORY_FILES } from "@/constants/card";
 import type {
   CardScanStats,
   GciFolderEntry,
+  GciFilenameSanitizeStyle,
   PipelineSettingsState,
 } from "@/types/memcard";
 
@@ -30,6 +31,7 @@ export function useMemcardWorkspace() {
     autoBuildRaw: true,
     autoCopyToSd: true,
     confirmBeforeSdCopy: false,
+    gciFilenameSanitize: "none",
   });
   const [pipelineSettingsOpen, setPipelineSettingsOpen] = useState(false);
 
@@ -120,6 +122,7 @@ export function useMemcardWorkspace() {
         autoBuildRaw: s.autoBuildRaw,
         autoCopyToSd: s.autoCopyToSd,
         confirmBeforeSdCopy: s.confirmBeforeSdCopy,
+        gciFilenameSanitize: (s.gciFilenameSanitize ?? "none") as GciFilenameSanitizeStyle,
       });
     })();
     return () => {

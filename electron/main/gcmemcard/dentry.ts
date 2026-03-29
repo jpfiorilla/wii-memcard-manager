@@ -1,4 +1,4 @@
-import { DENTRY_SIZE } from './constants'
+import { DENTRY_SIZE, DENTRY_STRLEN } from './constants'
 
 export function readDEntry(buf: Buffer, offset: number): Buffer {
   return buf.subarray(offset, offset + DENTRY_SIZE)
@@ -36,4 +36,13 @@ export function filenameString(d: Buffer): string {
   const end = d.indexOf(0, 8)
   const len = end === -1 ? 0x20 : Math.min(end - 8, 0x20)
   return d.toString('latin1', 8, 8 + len)
+}
+
+/** Writes the 32-byte null-padded filename field (offset 0x08). Latin-1; truncates to `DENTRY_STRLEN`. */
+export function writeDentryFilename(dentry: Buffer, latin1: string): void {
+  if (dentry.length < 8 + DENTRY_STRLEN) return
+  dentry.fill(0, 8, 8 + DENTRY_STRLEN)
+  const buf = Buffer.from(latin1, 'latin1')
+  const n = Math.min(DENTRY_STRLEN, buf.length)
+  buf.copy(dentry, 8, 0, n)
 }

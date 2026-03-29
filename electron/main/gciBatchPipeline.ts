@@ -5,7 +5,11 @@ import { touchFileAccessAndModified, writeFileReplacingBirthtime } from './fileT
 import { dentryGameCodeString } from './gcmemcard/dentry'
 import { MemCard2043Mb } from './gcmemcard/constants'
 import { formatEmptyCard } from './gcmemcard/format'
-import { gcTimestampSecondsFromUnixMs, importGcisIntoMemcard, MemcardImage } from './gcmemcard'
+import {
+  gcTimestampSecondsFromUnixMs,
+  importGcisIntoMemcardGreedy,
+  MemcardImage,
+} from './gcmemcard'
 import { parseGciFile } from './gcmemcard/gci'
 import { isGciProcessed, markGciProcessed } from './processedGciStore'
 import { enqueuePendingSd } from './pendingSdQueue'
@@ -105,6 +109,7 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
   for (const [gameCode, list] of byGame) {
     const paths = list.map((c) => c.absPath)
     const rawPath = await uniqueStagingRawPath(stagingDir, gameCode)
+    let marked: Candidate[] = []
 
     try {
       const gcSec = gcTimestampSecondsFromUnixMs(Date.now())
@@ -114,11 +119,19 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
         errors.push(`${gameCode}: ${cardLoad.error}`)
         continue
       }
-      const imp = await importGcisIntoMemcard(cardLoad.card, paths, { mTimeGcSeconds: gcSec })
+      const imp = await importGcisIntoMemcardGreedy(cardLoad.card, paths, {
+        mTimeGcSeconds: gcSec,
+        gciFilenameSanitize: s.gciFilenameSanitize,
+      })
       if (!imp.ok) {
         errors.push(`${gameCode}: ${imp.error}`)
         continue
       }
+      for (const w of imp.warnings) {
+        errors.push(`${gameCode}: ${w}`)
+      }
+      const importedSet = new Set(imp.importedPaths)
+      marked = list.filter((c) => importedSet.has(c.absPath))
       await writeFileReplacingBirthtime(rawPath, cardLoad.card.toBuffer())
       await touchFileAccessAndModified(rawPath)
     } catch (e) {
@@ -132,7 +145,7 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
       continue
     }
 
-    await markGciProcessed(list.map((c) => ({ path: c.absPath, mtimeMs: c.mtimeMs })))
+    await markGciProcessed(marked.map((c) => ({ path: c.absPath, mtimeMs: c.mtimeMs })))
     const destName = `${gameCode}.raw`
     await enqueuePendingSd({ localPath: rawPath, fileName: destName })
     outputs.push({ path: rawPath, gameCode })

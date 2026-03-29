@@ -18,6 +18,16 @@ export type MemcardUserSettings = {
   autoCopyToSd: boolean
   confirmBeforeSdCopy: boolean
   requireNintendontPath: boolean
+  gciFilenameSanitize: 'none' | 'ascii-title' | 'ascii-upper' | 'ascii-lower' | 'tmce-short'
+}
+
+export type GciDentryDescription = {
+  gameCode: string
+  companyCode: string
+  filenameInDentry: string
+  note: string
+  /** Melee roster ID when inferred from GTME `slug-...` dentry filename. */
+  meleeCharacterFromFilename?: number
 }
 
 export type GciFolderScanCardStats = {
@@ -58,6 +68,9 @@ export type MemcardApi = {
     rawPath: string,
     args: { gciPathsToAdd: string[]; gciPathsToRemove: string[] },
   ) => Promise<{ ok: true } | { ok: false; error: string }>
+  describeGci: (
+    gciPath: string,
+  ) => Promise<{ ok: true; description: GciDentryDescription } | { ok: false; error: string }>
   onFolderChanged: (callback: (data: MemcardFolderEvent) => void) => () => void
   onBatchBuilt: (
     callback: (data: { outputs: { path: string; gameCode: string }[]; errors: string[] }) => void,

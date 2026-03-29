@@ -4,7 +4,8 @@ import path from 'node:path'
 const VOLUMES = '/Volumes'
 
 /** Skip typical system / internal volume names under /Volumes. */
-const SKIP_VOLUME_NAMES = new Set(['Macintosh HD', 'Preboot', 'Recovery', 'VM', 'Update', 'Data'])
+/** Do not skip user-labeled volumes like "Data" — those are common on removable drives. */
+const SKIP_VOLUME_NAMES = new Set(['Macintosh HD', 'Preboot', 'Recovery', 'VM', 'Update'])
 
 export type VolumeMountInfo = {
   mountPath: string
@@ -12,8 +13,25 @@ export type VolumeMountInfo = {
 }
 
 let intervalId: ReturnType<typeof setInterval> | null = null
+/** Volume paths seen on the previous poll (for unmount detection). */
 let knownMounts = new Set<string>()
+/**
+ * Paths where `onMount` has already fired, or first-poll skip (already mounted).
+ * A volume can appear in `knownMounts` before `savesDir` exists; we must not add it here until ready.
+ */
+let mountsReady = new Set<string>()
 let firstPoll = true
+
+async function savesDirReady(mountPath: string, nintendontSavesRelativePath: string): Promise<string | null> {
+  const savesDir = path.join(mountPath, nintendontSavesRelativePath)
+  try {
+    const st = await fs.stat(savesDir)
+    if (!st.isDirectory()) return null
+  } catch {
+    return null
+  }
+  return savesDir
+}
 
 export function startVolumeWatcherMacos(opts: {
   nintendontSavesRelativePath: string
@@ -39,38 +57,41 @@ export function startVolumeWatcherMacos(opts: {
     }
 
     if (firstPoll) {
+      for (const m of current) {
+        const savesDir = await savesDirReady(m, opts.nintendontSavesRelativePath)
+        if (savesDir !== null) mountsReady.add(m)
+      }
       knownMounts = current
       firstPoll = false
       return
     }
 
-    for (const m of current) {
-      if (!knownMounts.has(m)) {
-        const savesDir = path.join(m, opts.nintendontSavesRelativePath)
-        try {
-          const st = await fs.stat(savesDir)
-          if (!st.isDirectory()) continue
-        } catch {
-          continue
-        }
-        opts.onMount({ mountPath: m, savesDir })
+    for (const k of knownMounts) {
+      if (!current.has(k)) {
+        opts.onUnmount(k)
+        mountsReady.delete(k)
       }
     }
 
-    for (const k of knownMounts) {
-      if (!current.has(k)) opts.onUnmount(k)
+    for (const m of current) {
+      if (mountsReady.has(m)) continue
+      const savesDir = await savesDirReady(m, opts.nintendontSavesRelativePath)
+      if (savesDir === null) continue
+      opts.onMount({ mountPath: m, savesDir })
+      mountsReady.add(m)
     }
 
     knownMounts = current
   }
 
   void poll()
-  intervalId = setInterval(() => void poll(), opts.pollMs ?? 2000)
+  intervalId = setInterval(() => void poll(), opts.pollMs ?? 1000)
 }
 
 export function stopVolumeWatcher(): void {
   if (intervalId) clearInterval(intervalId)
   intervalId = null
   knownMounts = new Set()
+  mountsReady = new Set()
   firstPoll = true
 }

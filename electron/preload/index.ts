@@ -15,6 +15,14 @@ type GciFolderScanCardStats = {
   freeBlocks: number
 }
 
+type GciDentryDescription = {
+  gameCode: string
+  companyCode: string
+  filenameInDentry: string
+  note: string
+  meleeCharacterFromFilename?: number
+}
+
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
   on(...args: Parameters<typeof ipcRenderer.on>) {
@@ -52,6 +60,7 @@ contextBridge.exposeInMainWorld('memcard', {
     autoCopyToSd?: boolean
     confirmBeforeSdCopy?: boolean
     requireNintendontPath?: boolean
+    gciFilenameSanitize?: 'none' | 'ascii-title' | 'ascii-upper' | 'ascii-lower' | 'tmce-short'
   }) => ipcRenderer.invoke('memcard:mergeUserSettings', partial),
   pickDirectory: (defaultPath?: string | null) =>
     ipcRenderer.invoke('memcard:pickDirectory', defaultPath),
@@ -79,6 +88,10 @@ contextBridge.exposeInMainWorld('memcard', {
   ) =>
     ipcRenderer.invoke('memcard:syncFolderSelection', { rawPath, ...args }) as Promise<
       { ok: true } | { ok: false; error: string }
+    >,
+  describeGci: (gciPath: string) =>
+    ipcRenderer.invoke('memcard:describeGci', gciPath) as Promise<
+      { ok: true; description: GciDentryDescription } | { ok: false; error: string }
     >,
   onFolderChanged: (callback: (data: { rootDir: string; eventKind: string; filePath: string }) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, data: { rootDir: string; eventKind: string; filePath: string }) =>

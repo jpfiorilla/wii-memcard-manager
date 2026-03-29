@@ -5,8 +5,8 @@
  * - **Directory:** `DIRLEN` (127) dentries — at most **127 saves** on a card (CARD API / hardware).
  * - **Space:** First `MC_FST_BLOCKS` blocks are system; the rest are user data. For a 251‑Mbit
  *   (2 MiB class) card, `sizeMb === MemCard251Mb` ⇒ `maxBlock === 256` ⇒ **251 user blocks**
- *   × 8 KiB each. Each `.gci` consumes `blockCount` blocks from that pool; a batch import fails
- *   with `OUTOFDIRENTRIES` or `OUTOFBLOCKS` when a limit is hit.
+ *   × 8 KiB each. Each `.gci` consumes `blockCount` blocks from that pool. Auto-batch uses greedy
+ *   import (newest first) until `OUTOFDIRENTRIES` or `OUTOFBLOCKS`; remaining `.gci` files stay unprocessed.
  * - **Per GCI:** dentry allows up to 4091 blocks in the format; a single save cannot exceed
  *   remaining free blocks on the card.
  */
@@ -14,6 +14,8 @@
 export const MC_FST_BLOCKS = 5
 export const MBIT_TO_BLOCKS = 0x10
 export const DENTRY_STRLEN = 0x20
+/** TM:CE in-game save list truncates aggressively; keep whole dentry name at or below this (≤ `DENTRY_STRLEN`). */
+export const GCI_FILENAME_TMCE_MAX_BYTES = 20
 export const DENTRY_SIZE = 0x40
 export const BLOCK_SIZE = 0x2000
 export const BAT_SIZE = 0xffb

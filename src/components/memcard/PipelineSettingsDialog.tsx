@@ -5,7 +5,11 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   FormControlLabel,
+  InputLabel,
+  MenuItem,
+  Select,
   Stack,
   Switch,
   TextField,
@@ -73,6 +77,32 @@ export function PipelineSettingsDialog({
               {pipeline.stagingDir ?? "Default: app data / staging"}
             </Typography>
           </Stack>
+          <FormControl size="small" sx={{ maxWidth: 420 }}>
+            <InputLabel id="gci-filename-sanitize-label">
+              GCI filename on import
+            </InputLabel>
+            <Select
+              labelId="gci-filename-sanitize-label"
+              label="GCI filename on import"
+              value={pipeline.gciFilenameSanitize}
+              onChange={(e) =>
+                void updatePipeline({
+                  gciFilenameSanitize: e.target.value as PipelineSettingsState["gciFilenameSanitize"],
+                })
+              }
+            >
+              <MenuItem value="none">Keep as in file (default)</MenuItem>
+              <MenuItem value="tmce-short">TM:CE short slugs + length cap</MenuItem>
+              <MenuItem value="ascii-title">ASCII title case (per segment)</MenuItem>
+              <MenuItem value="ascii-upper">ASCII UPPER</MenuItem>
+              <MenuItem value="ascii-lower">ASCII lower</MenuItem>
+            </Select>
+          </FormControl>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: -0.5 }}>
+            TM:CE mode rewrites names to short fighter slugs (Zelda is stored as sheik) and caps total
+            length so labels fit in-game. Renaming can break saves that reference the dentry string —
+            use &quot;Keep as in file&quot; unless you know it is safe.
+          </Typography>
           <TextField
             label="Quiet period before build (ms)"
             type="number"

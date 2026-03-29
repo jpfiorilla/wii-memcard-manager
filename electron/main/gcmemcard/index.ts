@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { touchFileAccessAndModified } from '../fileTimes'
+import { touchFileAccessAndModified, writeFileReplacingBirthtime } from '../fileTimes'
 import type { MemcardResultCode } from './constants'
 import { gcTimestampSecondsFromUnixMs } from './gcTime'
 import { parseGciFile } from './gci'
@@ -139,7 +139,7 @@ export async function syncFolderSelectionToRaw(
   if (!inner.ok) return inner
 
   try {
-    await fs.writeFile(rawPath, card.toBuffer())
+    await writeFileReplacingBirthtime(rawPath, card.toBuffer())
     await touchFileAccessAndModified(rawPath)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -190,7 +190,7 @@ export async function importGciIntoRaw(
   }
 
   try {
-    await fs.writeFile(rawPath, card.toBuffer())
+    await writeFileReplacingBirthtime(rawPath, card.toBuffer())
     await touchFileAccessAndModified(rawPath)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { app } from 'electron'
-import { touchFileAccessAndModified } from './fileTimes'
+import { touchFileAccessAndModified, writeFileReplacingBirthtime } from './fileTimes'
 import { dentryGameCodeString } from './gcmemcard/dentry'
 import { MemCard2043Mb } from './gcmemcard/constants'
 import { formatEmptyCard } from './gcmemcard/format'
@@ -119,7 +119,7 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
         errors.push(`${gameCode}: ${imp.error}`)
         continue
       }
-      await fs.writeFile(rawPath, cardLoad.card.toBuffer())
+      await writeFileReplacingBirthtime(rawPath, cardLoad.card.toBuffer())
       await touchFileAccessAndModified(rawPath)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)

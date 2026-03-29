@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { touchFileAccessAndModified } from './fileTimes'
+import { touchFileAccessAndModified, writeFileReplacingBirthtime } from './fileTimes'
 import { showMemcardNotification } from './notifications'
 
 export async function copyLocalRawToSdSaves(opts: {
@@ -47,7 +47,8 @@ export async function copyLocalRawToSdSaves(opts: {
   }
 
   try {
-    await fs.copyFile(opts.localPath, destPath)
+    const buf = await fs.readFile(opts.localPath)
+    await writeFileReplacingBirthtime(destPath, buf)
     await touchFileAccessAndModified(destPath)
     return { ok: true, destPath }
   } catch (e) {

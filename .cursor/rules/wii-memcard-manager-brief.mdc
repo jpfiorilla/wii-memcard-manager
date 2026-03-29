@@ -1,0 +1,34 @@
+---
+description: Project briefing — goals, stack, done vs planned, related repos, dev commands
+alwaysApply: true
+---
+
+# Wii Memcard Manager — Brief
+
+## Stack
+
+Electron + Vite + React + TypeScript; MUI + notistack; **chokidar** in the main process.
+
+## Goal
+
+Desktop tool for **`.gci`** / **`.raw`** for **real Wiis** (Nintendont), especially `saves/GTME.raw` for TM:CE (game prefix **GTME**), vs `saves/GALE.raw` for vanilla US Melee (**GALE**). This is **not** Dolphin’s Memory Card Manager.
+
+## Already in the codebase
+
+- IPC `window.memcard`: pick directory/file, start/stop folder watch
+- **`backupBeforeWrite`** — copies the existing target `.raw` into `backups/` beside it (timestamped) before any future overwrite logic runs
+- UI: SSBM-ish dark theme, placeholders for GCI folder + target `.raw`, activity list for watcher events
+
+## Not done yet
+
+Actual **merge/import** of `.gci` into `.raw` (GCMemcard-style logic). Dolphin/Ishiiruka reference: `Source/Core/Core/HW/GCMemcard*.cpp` — **GPLv2+** if you copy/port that code; plan license compliance before shipping merged logic.
+
+## Related repos (context only)
+
+- **Ishiiruka** (e.g. Slippi Dolphin fork) — memcard reference implementation; not where this Electron app lives
+- **slippi-launcher** — optional future integration (open/bundle app)
+- **TM:CE / Nintendont** — no changes required there if this tool writes correct `saves/*.raw`
+
+## Commands
+
+- Dev: `npm run dev` from repo root (backend **8000**, frontend **3000**)

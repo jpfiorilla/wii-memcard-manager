@@ -33,14 +33,18 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      - name: List release outputs
+      - name: Collect installers (DMG / NSIS only)
         shell: bash
-        run: find release -type f | sort
+        run: |
+          mkdir -p installers
+          find release -name 'Wii Memcard Manager_*.dmg' -exec cp {} installers/ \;
+          find release -name 'Wii Memcard Manager_*.exe' -exec cp {} installers/ \;
+          find installers -type f | sort
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os }}-binaries
-          path: release/
+          name: installers-${{ matrix.os }}
+          path: installers/
           if-no-files-found: error
 
   publish-to-release:
@@ -65,7 +69,6 @@ jobs:
           working_directory: assets
           files: |
             **/*.dmg
-            **/*.zip
             **/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

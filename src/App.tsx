@@ -1,4 +1,4 @@
-import { Box, Chip, Stack, Typography, useMediaQuery } from "@mui/material";
+import { Box, Stack, useMediaQuery } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { useMemcardWorkspace } from "@/hooks/useMemcardWorkspace";
 import { GciCandidateList } from "@/components/memcard/GciCandidateList";
@@ -41,19 +41,6 @@ export default function App() {
         updatePipeline={w.updatePipeline}
       />
 
-      <Typography
-        variant="body2"
-        color="text.secondary"
-        sx={{ mb: 2, maxWidth: 720 }}
-      >
-        Add or remove saves on your Nintendont <code>.raw</code> using the
-        checklist (checked = desired state on the card). Choosing a GCI folder
-        starts <strong>watching</strong> it; new <code>.gci</code> files can be
-        batched into staging images and copied to the SD when you plug it in
-        (macOS). Before each apply, the current card file is copied to{" "}
-        <code>backups/</code> beside it.
-      </Typography>
-
       <SourceTargetPipeline
         isNarrow={isNarrow}
         gciFolder={w.gciFolder}
@@ -76,9 +63,14 @@ export default function App() {
       />
 
       <Stack
-        direction={{ xs: "column", lg: "row" }}
-        spacing={2}
-        alignItems="flex-start"
+        sx={{
+          gap: 2,
+          flexDirection: "column",
+          alignItems: "stretch",
+          [theme.breakpoints.up(400)]: {
+            flexDirection: "row",
+          },
+        }}
       >
         <GciCandidateList
           candidates={w.candidates}
@@ -103,15 +95,6 @@ export default function App() {
         />
       </Stack>
 
-      <Box sx={{ mt: 3 }}>
-        <Chip
-          size="small"
-          label="TM:CE → GTME.raw"
-          variant="outlined"
-          sx={{ mr: 1 }}
-        />
-        <Chip size="small" label="Vanilla US → GALE.raw" variant="outlined" />
-      </Box>
     </Box>
   );
 }

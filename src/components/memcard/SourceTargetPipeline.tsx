@@ -61,7 +61,7 @@ export function SourceTargetPipeline({
             Source
           </Typography>
           <Typography variant="subtitle2" sx={{ mt: 0.5, mb: 1 }}>
-            .gci folder
+            Folder of saves
           </Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <Button
@@ -91,7 +91,7 @@ export function SourceTargetPipeline({
             </Typography>
           ) : (
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Not set — choose where new <code>.gci</code> files land.
+              Not set
             </Typography>
           )}
         </Box>
@@ -118,7 +118,7 @@ export function SourceTargetPipeline({
             Target
           </Typography>
           <Typography variant="subtitle2" sx={{ mt: 0.5, mb: 1 }}>
-            Nintendont .raw
+            Card file (.raw)
           </Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <Button
@@ -148,7 +148,7 @@ export function SourceTargetPipeline({
             </Typography>
           ) : (
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Not set — choose the card file to update.
+              Not set
             </Typography>
           )}
         </Box>

@@ -56,7 +56,7 @@ export function ScanToolbar({
         >
           Rescan
         </Button>
-        <Tooltip title="Selects every save already on the card, then a newest-first prefix of not-on-card files that fit without removing any on-card saves. If the directory is full, adds at most one more not-on-card by evicting oldest on-card saves until that import fits (skips a file that cannot fit, e.g. too large).">
+        <Tooltip title="Checks saves that fit on the card (prefers newest).">
           <Box
             sx={{
               display: "flex",

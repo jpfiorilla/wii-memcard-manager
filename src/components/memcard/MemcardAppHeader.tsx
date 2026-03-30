@@ -50,7 +50,7 @@ export function MemcardAppHeader({
         justifyContent={{ xs: "stretch", sm: "flex-end" }}
         sx={{ flexShrink: 0 }}
       >
-        <Tooltip title="Background pipeline (macOS SD) — staging, auto-build, SD copy">
+        <Tooltip title="SD copy & pipeline (Mac)">
           <IconButton
             color="inherit"
             size="large"

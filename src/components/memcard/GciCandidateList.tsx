@@ -7,6 +7,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import type { GciFolderEntry } from "@/types/memcard";
 import { formatFolderRelativeTime } from "@/utils/formatFolderRelativeTime";
 
@@ -27,6 +28,7 @@ export function GciCandidateList({
   rawPath,
   onTogglePath,
 }: GciCandidateListProps) {
+  const theme = useTheme();
   const sorted = useMemo(
     () =>
       [...candidates].sort(
@@ -44,9 +46,9 @@ export function GciCandidateList({
         width: "100%",
         minWidth: 0,
         minHeight: 0,
-        maxHeight: {
-          xs: "min(70vh, 560px)",
-          lg: "calc(100vh - 320px)",
+        maxHeight: "min(70vh, 560px)",
+        [theme.breakpoints.up(400)]: {
+          maxHeight: "calc(100vh - 320px)",
         },
         display: "flex",
         flexDirection: "column",
@@ -55,7 +57,7 @@ export function GciCandidateList({
     >
       <Box sx={{ flexShrink: 0 }}>
         <Typography variant="subtitle1" gutterBottom>
-          Saves in folder
+          Saves
         </Typography>
         <Typography
           variant="caption"
@@ -63,22 +65,18 @@ export function GciCandidateList({
           color="text.secondary"
           sx={{ mb: 1.5 }}
         >
-          Newest at top (same order as &quot;Select all importable&quot;).{" "}
-          <strong>Checked</strong> = should be on the target <code>.raw</code>{" "}
-          (saves already on the card start checked). Uncheck an on-card save to
-          remove it on apply; check a new <code>.gci</code> to add it. Times use
-          each file&apos;s modified date from the folder.
+          Checked = stays on the card after you apply.
         </Typography>
 
         {!scanning && gciFolder && rawPath && candidates.length === 0 && (
           <Typography variant="body2" color="text.secondary">
-            No .gci files in this folder.
+            No saves in this folder.
           </Typography>
         )}
 
         {!scanning && (!gciFolder || !rawPath) && (
           <Typography variant="body2" color="text.secondary">
-            Set source and target above to list saves.
+            Choose folder and card above.
           </Typography>
         )}
       </Box>
@@ -147,7 +145,7 @@ export function GciCandidateList({
                 key={c.path}
                 title={
                   c.alreadyOnCard && !c.parseError
-                    ? "On the target .raw now. Uncheck to remove this save when you apply."
+                    ? "On the card now — uncheck to remove."
                     : ""
                 }
                 disableHoverListener={!c.alreadyOnCard || !!c.parseError}

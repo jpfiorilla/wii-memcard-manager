@@ -55,18 +55,15 @@ export function useMemcardSelectionDerived(
 
     let importButtonTooltip: string;
     if (!rawPath) {
-      importButtonTooltip =
-        "Choose a target Nintendont .raw file in the Target section above.";
+      importButtonTooltip = "Pick a .raw file (Target).";
     } else if (!gciFolder) {
-      importButtonTooltip =
-        "Choose a folder of .gci files in the Source section above.";
+      importButtonTooltip = "Pick a folder (Source).";
     } else if (invalid) {
       importButtonTooltip = invalid;
     } else if (pendingChangeCount > 0) {
       importButtonTooltip = "";
     } else {
-      importButtonTooltip =
-        "Check or uncheck rows so the list matches what you want on the target .raw, then apply.";
+      importButtonTooltip = "Change some checkboxes first.";
     }
 
     const importDisabled =

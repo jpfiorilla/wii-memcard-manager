@@ -43,40 +43,56 @@ export function GciCandidateList({
         flex: 1,
         width: "100%",
         minWidth: 0,
-        maxHeight: { lg: "calc(100vh - 320px)" },
-        overflow: "auto",
+        minHeight: 0,
+        maxHeight: {
+          xs: "min(70vh, 560px)",
+          lg: "calc(100vh - 320px)",
+        },
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
       }}
     >
-      <Typography variant="subtitle1" gutterBottom>
-        Saves in folder
-      </Typography>
-      <Typography
-        variant="caption"
-        display="block"
-        color="text.secondary"
-        sx={{ mb: 1.5 }}
-      >
-        Newest at top (same order as &quot;Select all importable&quot;).{" "}
-        <strong>Checked</strong> = should be on the target <code>.raw</code>{" "}
-        (saves already on the card start checked). Uncheck an on-card save to
-        remove it on apply; check a new <code>.gci</code> to add it. Times use
-        each file&apos;s modified date from the folder.
-      </Typography>
-
-      {!scanning && gciFolder && rawPath && candidates.length === 0 && (
-        <Typography variant="body2" color="text.secondary">
-          No .gci files in this folder.
+      <Box sx={{ flexShrink: 0 }}>
+        <Typography variant="subtitle1" gutterBottom>
+          Saves in folder
         </Typography>
-      )}
-
-      {!scanning && (!gciFolder || !rawPath) && (
-        <Typography variant="body2" color="text.secondary">
-          Set source and target above to list saves.
+        <Typography
+          variant="caption"
+          display="block"
+          color="text.secondary"
+          sx={{ mb: 1.5 }}
+        >
+          Newest at top (same order as &quot;Select all importable&quot;).{" "}
+          <strong>Checked</strong> = should be on the target <code>.raw</code>{" "}
+          (saves already on the card start checked). Uncheck an on-card save to
+          remove it on apply; check a new <code>.gci</code> to add it. Times use
+          each file&apos;s modified date from the folder.
         </Typography>
-      )}
+
+        {!scanning && gciFolder && rawPath && candidates.length === 0 && (
+          <Typography variant="body2" color="text.secondary">
+            No .gci files in this folder.
+          </Typography>
+        )}
+
+        {!scanning && (!gciFolder || !rawPath) && (
+          <Typography variant="body2" color="text.secondary">
+            Set source and target above to list saves.
+          </Typography>
+        )}
+      </Box>
 
       {sorted.length > 0 && (
-        <FormGroup sx={{ gap: 0 }}>
+        <Box
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
+            mt: 0.5,
+          }}
+        >
+          <FormGroup sx={{ gap: 0 }}>
           {sorted.map((c) => {
             const canToggle = !c.parseError;
             const checked = canToggle && selectedPaths.has(c.path);
@@ -154,7 +170,8 @@ export function GciCandidateList({
               </Tooltip>
             );
           })}
-        </FormGroup>
+          </FormGroup>
+        </Box>
       )}
     </Paper>
   );

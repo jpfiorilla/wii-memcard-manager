@@ -38,6 +38,7 @@ async function writeStore(s: StoreShape): Promise<void> {
 
 export async function enqueuePendingSd(item: PendingSdItem): Promise<void> {
   const s = await readStore()
+  s.items = s.items.filter((i) => i.fileName !== item.fileName)
   s.items.push(item)
   await writeStore(s)
 }

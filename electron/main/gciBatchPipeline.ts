@@ -25,18 +25,6 @@ export function resolveStagingDir(s: MemcardUserSettings): string {
   return s.stagingDir ?? path.join(app.getPath('userData'), 'staging')
 }
 
-async function uniqueStagingRawPath(stagingDir: string, gameCode: string): Promise<string> {
-  await fs.mkdir(stagingDir, { recursive: true })
-  const base = `${gameCode}.raw`
-  const primary = path.join(stagingDir, base)
-  try {
-    await fs.access(primary)
-    return path.join(stagingDir, `${gameCode}-${Date.now()}.raw`)
-  } catch {
-    return primary
-  }
-}
-
 type Candidate = {
   absPath: string
   mtimeMs: number
@@ -106,9 +94,11 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
   const outputs: { path: string; gameCode: string }[] = []
   const errors: string[] = []
 
+  await fs.mkdir(stagingDir, { recursive: true })
+
   for (const [gameCode, list] of byGame) {
     const paths = list.map((c) => c.absPath)
-    const rawPath = await uniqueStagingRawPath(stagingDir, gameCode)
+    const rawPath = path.join(stagingDir, `${gameCode}.raw`)
     let marked: Candidate[] = []
 
     try {

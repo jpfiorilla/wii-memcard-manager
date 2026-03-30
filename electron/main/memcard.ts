@@ -29,6 +29,8 @@ const batchBuildTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const FOLDER_UI_DEBOUNCE_MS = 400
 
 let batchBuildRunning = false
+/** When a folder event fires while a batch is in progress, we coalesce into one rerun after it finishes. */
+const pendingBatchRoots = new Set<string>()
 
 function broadcast(channel: string, payload: unknown) {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -66,7 +68,10 @@ function scheduleAutoBatch(rootDir: string) {
 }
 
 async function runBatchAndNotify(rootDir: string) {
-  if (batchBuildRunning) return
+  if (batchBuildRunning) {
+    pendingBatchRoots.add(rootDir)
+    return
+  }
   const s = await readUserSettings()
   if (s.gciFolder !== rootDir || !s.autoBuildRaw) return
 
@@ -82,6 +87,14 @@ async function runBatchAndNotify(rootDir: string) {
     await notifyAfterBatchPipelineMacos(r.outputs, r.errors)
   } finally {
     batchBuildRunning = false
+    const hadPending = pendingBatchRoots.size > 0
+    pendingBatchRoots.clear()
+    if (hadPending) {
+      const latest = await readUserSettings()
+      if (latest.gciFolder && latest.autoBuildRaw) {
+        await runBatchAndNotify(latest.gciFolder)
+      }
+    }
   }
 }
 

@@ -24,7 +24,7 @@ export async function copyLocalRawToSdSaves(opts: {
     if (st.isFile()) {
       const backupsDir = path.join(opts.savesDir, 'backups')
       if (notify) {
-        showMemcardNotification(
+        await showMemcardNotification(
           'SD card: backing up existing save',
           `Archiving the current ${opts.destFileName} into:\n${backupsDir}\n(timestamped) before writing the new file.`,
         )
@@ -40,7 +40,7 @@ export async function copyLocalRawToSdSaves(opts: {
   }
 
   if (notify) {
-    showMemcardNotification(
+    await showMemcardNotification(
       'SD card: copying new memory card file',
       `Copying ${opts.destFileName} from staging to:\n${destPath}`,
     )

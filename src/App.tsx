@@ -47,8 +47,8 @@ export default function App() {
         sx={{ mb: 2, maxWidth: 720 }}
       >
         Add or remove saves on your Nintendont <code>.raw</code> using the
-        checklist (checked = desired state on the card). With{" "}
-        <strong>Watch</strong> enabled, new <code>.gci</code> files can be
+        checklist (checked = desired state on the card). Choosing a GCI folder
+        starts <strong>watching</strong> it; new <code>.gci</code> files can be
         batched into staging images and copied to the SD when you plug it in
         (macOS). Before each apply, the current card file is copied to{" "}
         <code>backups/</code> beside it.

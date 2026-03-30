@@ -25,6 +25,8 @@ export type MemcardUserSettings = {
   requireNintendontPath: boolean
   /** Normalize dentry filenames when importing GCIs onto a card. */
   gciFilenameSanitize: 'none' | 'ascii-title' | 'ascii-upper' | 'ascii-lower' | 'tmce-short'
+  /** macOS/Windows: show Electron Notification Center messages (SD, batch build, volume). */
+  notificationsEnabled: boolean
 }
 
 const defaults: MemcardUserSettings = {
@@ -40,6 +42,7 @@ const defaults: MemcardUserSettings = {
   confirmBeforeSdCopy: false,
   requireNintendontPath: true,
   gciFilenameSanitize: 'none',
+  notificationsEnabled: true,
 }
 
 function filePath(): string {
@@ -68,6 +71,8 @@ function merge(a: MemcardUserSettings, partial: Partial<MemcardUserSettings>): M
       partial.requireNintendontPath !== undefined ? partial.requireNintendontPath : a.requireNintendontPath,
     gciFilenameSanitize:
       partial.gciFilenameSanitize !== undefined ? partial.gciFilenameSanitize : a.gciFilenameSanitize,
+    notificationsEnabled:
+      partial.notificationsEnabled !== undefined ? partial.notificationsEnabled : a.notificationsEnabled,
   }
 }
 
@@ -103,6 +108,8 @@ export async function readUserSettings(): Promise<MemcardUserSettings> {
         parsed.gciFilenameSanitize === 'none'
           ? parsed.gciFilenameSanitize
           : defaults.gciFilenameSanitize,
+      notificationsEnabled:
+        typeof parsed.notificationsEnabled === 'boolean' ? parsed.notificationsEnabled : defaults.notificationsEnabled,
     })
   } catch {
     return { ...defaults }

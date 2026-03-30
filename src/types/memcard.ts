@@ -28,4 +28,6 @@ export type PipelineSettingsState = {
   autoCopyToSd: boolean
   confirmBeforeSdCopy: boolean
   gciFilenameSanitize: GciFilenameSanitizeStyle
+  /** OS + in-app alerts from background pipeline (batch, SD, volumes). */
+  notificationsEnabled: boolean
 }

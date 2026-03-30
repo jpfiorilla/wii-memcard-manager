@@ -175,7 +175,7 @@ async function notifySdVolumeMountedMacos(latest: MemcardUserSettings, volName: 
   if (process.platform !== 'darwin') return
   const savesRel = latest.nintendontSavesRelativePath
   if (!latest.autoCopyToSd) {
-    showMemcardNotification(
+    await showMemcardNotification(
       'SD volume detected',
       `${volName} — ${savesRel} found. Auto-copy to SD is off (change in Settings to transfer).`,
     )
@@ -183,21 +183,21 @@ async function notifySdVolumeMountedMacos(latest: MemcardUserSettings, volName: 
   }
   const pending = await peekPendingSdAll()
   if (pending.length === 0) {
-    showMemcardNotification(
+    await showMemcardNotification(
       'SD card synced',
       `${volName} — ${savesRel} found. No pending files; already up to date.`,
     )
     return
   }
-  showMemcardNotification(
+  await showMemcardNotification(
     'SD volume ready',
     `${volName} — copying ${pending.length} pending file(s) to the card…`,
   )
 }
 
-function notifyVolumeUnmountedMacos(mountPath: string) {
+async function notifyVolumeUnmountedMacos(mountPath: string) {
   if (process.platform !== 'darwin') return
-  showMemcardNotification('Volume ejected', `${path.basename(mountPath)} was unmounted.`)
+  await showMemcardNotification('Volume ejected', `${path.basename(mountPath)} was unmounted.`)
 }
 
 async function notifyAfterBatchPipelineMacos(
@@ -207,7 +207,7 @@ async function notifyAfterBatchPipelineMacos(
   if (process.platform !== 'darwin') return
   if (errors.length > 0) {
     const msg = errors.slice(0, 3).join(' · ')
-    showMemcardNotification('Batch build: issues', msg + (errors.length > 3 ? '…' : ''))
+    await showMemcardNotification('Batch build: issues', msg + (errors.length > 3 ? '…' : ''))
   }
   if (outputs.length === 0) return
 
@@ -216,20 +216,20 @@ async function notifyAfterBatchPipelineMacos(
   const pending = await peekPendingSdAll()
 
   if (!s.autoCopyToSd) {
-    showMemcardNotification(
+    await showMemcardNotification(
       'Staging .raw built',
       `${codes} — saved to staging. Turn on auto-copy to SD in Settings to copy to the card.`,
     )
     return
   }
   if (pending.length === 0) {
-    showMemcardNotification(
+    await showMemcardNotification(
       'Memory card ready',
       `${codes} — copied to SD (nintendont/saves).`,
     )
     return
   }
-  showMemcardNotification(
+  await showMemcardNotification(
     'Staging .raw built',
     `${codes} — ${pending.length} file(s) still queued (insert SD or check ${s.nintendontSavesRelativePath}).`,
   )
@@ -254,7 +254,7 @@ function reconfigureVolumeWatcher() {
       },
       onUnmount: (mountPath) => {
         broadcast('memcard:volume-unmounted', { mountPath })
-        notifyVolumeUnmountedMacos(mountPath)
+        void notifyVolumeUnmountedMacos(mountPath)
       },
     })
   })()

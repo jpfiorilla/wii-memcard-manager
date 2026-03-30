@@ -19,6 +19,7 @@ export type MemcardUserSettings = {
   confirmBeforeSdCopy: boolean
   requireNintendontPath: boolean
   gciFilenameSanitize: 'none' | 'ascii-title' | 'ascii-upper' | 'ascii-lower' | 'tmce-short'
+  notificationsEnabled: boolean
 }
 
 export type GciDentryDescription = {

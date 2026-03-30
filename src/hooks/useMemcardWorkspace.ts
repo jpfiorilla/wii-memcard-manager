@@ -44,6 +44,7 @@ export function useMemcardWorkspace() {
     autoCopyToSd: true,
     confirmBeforeSdCopy: false,
     gciFilenameSanitize: "none",
+    notificationsEnabled: true,
   });
   const [pipelineSettingsOpen, setPipelineSettingsOpen] = useState(false);
 
@@ -110,6 +111,7 @@ export function useMemcardWorkspace() {
         confirmBeforeSdCopy: s.confirmBeforeSdCopy,
         gciFilenameSanitize: (s.gciFilenameSanitize ??
           "none") as GciFilenameSanitizeStyle,
+        notificationsEnabled: s.notificationsEnabled,
       });
     })();
     return () => {
@@ -153,11 +155,21 @@ export function useMemcardWorkspace() {
       setWatching(false);
     }
     setGciFolder(p);
-    await window.memcard.mergeUserSettings({
-      gciFolder: p,
-      folderWatchEnabled: false,
-    });
-    enqueueSnackbar(`GCI folder: ${p}`, { variant: "success" });
+    const r = await window.memcard.startWatch(p);
+    if (r?.ok) {
+      setWatching(true);
+      await window.memcard.mergeUserSettings({
+        gciFolder: p,
+        folderWatchEnabled: true,
+      });
+      enqueueSnackbar(`GCI folder: ${p} (watching)`, { variant: "success" });
+    } else {
+      await window.memcard.mergeUserSettings({
+        gciFolder: p,
+        folderWatchEnabled: false,
+      });
+      enqueueSnackbar("Could not start folder watch", { variant: "error" });
+    }
   };
 
   const pickRaw = async () => {

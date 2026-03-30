@@ -54,6 +54,21 @@ export function PipelineSettingsDialog({
           pending images copy there (existing files go to{" "}
           <code>backups/</code> on the SD first).
         </Typography>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={pipeline.notificationsEnabled}
+              onChange={(_, v) => void updatePipeline({ notificationsEnabled: v })}
+              size="small"
+            />
+          }
+          label="Notifications (system + in-app toasts for pipeline events)"
+          sx={{ mb: 1, alignItems: "flex-start" }}
+        />
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
+          When off, no Notification Center alerts and no toasts for batch builds, SD
+          copy, or volume mount. System notifications never play a sound.
+        </Typography>
         <Stack spacing={1.5}>
           <Stack
             direction={{ xs: "column", sm: "row" }}

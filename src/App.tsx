@@ -10,7 +10,7 @@ import { SourceTargetPipeline } from "@/components/memcard/SourceTargetPipeline"
 
 export default function App() {
   const theme = useTheme();
-  const isNarrow = useMediaQuery(theme.breakpoints.down("md"));
+  const isSourceTargetStacked = useMediaQuery(theme.breakpoints.down(400));
   const isXs = useMediaQuery(theme.breakpoints.down("sm"));
   const w = useMemcardWorkspace();
 
@@ -42,7 +42,7 @@ export default function App() {
       />
 
       <SourceTargetPipeline
-        isNarrow={isNarrow}
+        isNarrow={isSourceTargetStacked}
         gciFolder={w.gciFolder}
         rawPath={w.rawPath}
         watching={w.watching}

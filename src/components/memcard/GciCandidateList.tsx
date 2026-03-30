@@ -48,6 +48,7 @@ export function GciCandidateList({
         minHeight: 0,
         maxHeight: "min(70vh, 560px)",
         [theme.breakpoints.up(400)]: {
+          flex: "2 1 0",
           maxHeight: "calc(100vh - 320px)",
         },
         display: "flex",

@@ -13,8 +13,8 @@ export function PipelineArrow({ isNarrow }: PipelineArrowProps) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        px: { xs: 0, md: 1 },
-        py: { xs: 1, md: 0 },
+        px: isNarrow ? 0 : 1,
+        py: isNarrow ? 1 : 0,
         color: "secondary.light",
       }}
     >

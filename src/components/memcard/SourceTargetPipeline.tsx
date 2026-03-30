@@ -1,4 +1,5 @@
 import { Box, Button, Paper, Stack, Typography } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 import SaveIcon from "@mui/icons-material/Save";
 import { PipelineArrow } from "./PipelineArrow";
@@ -24,6 +25,7 @@ export function SourceTargetPipeline({
   onPickRaw,
   onTestBackup,
 }: SourceTargetPipelineProps) {
+  const theme = useTheme();
   return (
     <Paper
       elevation={0}
@@ -37,10 +39,15 @@ export function SourceTargetPipeline({
       }}
     >
       <Stack
-        direction={{ xs: "column", md: "row" }}
         spacing={0}
         alignItems="stretch"
-        sx={{ position: "relative" }}
+        sx={{
+          position: "relative",
+          flexDirection: "column",
+          [theme.breakpoints.up(400)]: {
+            flexDirection: "row",
+          },
+        }}
       >
         <Box
           sx={{
@@ -104,9 +111,12 @@ export function SourceTargetPipeline({
             minWidth: 0,
             p: 2,
             borderRadius: 1,
-            borderRight: { md: "4px solid" },
-            borderBottom: { xs: "4px solid", md: "none" },
+            borderBottom: "4px solid",
             borderColor: "primary.main",
+            [theme.breakpoints.up(400)]: {
+              borderBottom: "none",
+              borderRight: "4px solid",
+            },
             bgcolor: "rgba(255, 20, 147, 0.05)",
           }}
         >

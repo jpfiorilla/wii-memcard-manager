@@ -41,10 +41,9 @@ export function PendingChangesPanel({
       sx={{
         p: 2,
         width: "100%",
-        flexShrink: 0,
+        minWidth: 0,
         [theme.breakpoints.up(400)]: {
-          width: 360,
-          maxWidth: "100%",
+          flex: "1 1 0",
           position: "sticky",
           top: 88,
         },

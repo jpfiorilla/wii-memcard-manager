@@ -101,7 +101,7 @@ app.whenReady().then(async () => {
     tray = new Tray(img)
     tray.setToolTip('Wii Memcard Manager — saves folder watch and SD copy')
     const showMainWindow = () => {
-      app.dock.show()
+      app.dock?.show()
       if (win) {
         win.show()
         win.focus()
@@ -124,7 +124,7 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   } else if (tray) {
-    app.dock.hide()
+    app.dock?.hide()
   }
 })
 
@@ -138,7 +138,7 @@ app.on('second-instance', () => {
 
 app.on('activate', () => {
   if (process.platform === 'darwin') {
-    app.dock.show()
+    app.dock?.show()
   }
   const allWindows = BrowserWindow.getAllWindows()
   if (allWindows.length) {

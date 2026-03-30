@@ -15,4 +15,6 @@ When the user says **publish this**, **publish**, **cut a release**, or similar 
 5. **Annotated tag** `vX.Y.Z` and **push** the tag.
 6. **GitHub Release** for that tag (`gh release create` with short notes, or attach CI artifacts after the workflow runs).
 
+If release assets are missing, check **Actions → Build release binaries** for the tag run; fix workflow if needed, then **Re-run all jobs** on that run (keeps `refs/tags/...` so the publish step runs).
+
 Do not ask them to do these steps manually unless something fails (auth, `gh` missing, etc.).

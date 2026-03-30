@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-import { app, BrowserWindow, shell, ipcMain, Tray, Menu } from 'electron'
+import { app, BrowserWindow, screen, shell, ipcMain, Tray, Menu } from 'electron'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -51,8 +51,12 @@ const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
 
 async function createWindow() {
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize
   win = new BrowserWindow({
     title: 'Wii Memcard Manager',
+    width,
+    height,
+    show: false,
     icon: createAppWindowIcon(process.env.APP_ROOT, process.env.VITE_PUBLIC),
     webPreferences: {
       preload,
@@ -72,6 +76,11 @@ async function createWindow() {
   } else {
     win.loadFile(indexHtml)
   }
+
+  win.once('ready-to-show', () => {
+    win?.maximize()
+    win?.show()
+  })
 
   // Test actively push message to the Electron-Renderer
   win.webContents.on('did-finish-load', () => {

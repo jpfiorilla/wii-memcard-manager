@@ -56,7 +56,7 @@ export function ScanToolbar({
         >
           Rescan
         </Button>
-        <Tooltip title="Selects the newest importable files first (by modified time), stopping when the card runs out of save slots or free blocks.">
+        <Tooltip title="Selects every save already on the card, then a newest-first prefix of not-on-card files that fit without removing any on-card saves. If the directory is full, adds at most one more not-on-card by evicting oldest on-card saves until that import fits (skips a file that cannot fit, e.g. too large).">
           <Box
             sx={{
               display: "flex",

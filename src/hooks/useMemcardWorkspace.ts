@@ -1,15 +1,27 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+/**
+ * Composes folder scan, checklist selection, pipeline settings, and IPC actions for the memcard UI.
+ * Pure logic lives in `@/utils/memcardWorkspace/*` and `@/hooks/memcard/*`.
+ */
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSnackbar } from "notistack";
-import { MAX_CARD_DIRECTORY_FILES } from "@/constants/card";
 import type {
   CardScanStats,
   GciFolderEntry,
   GciFilenameSanitizeStyle,
   PipelineSettingsState,
 } from "@/types/memcard";
+import { nextSelectionAfterScan } from "@/utils/memcardWorkspace/nextSelectionAfterScan";
+import { gciPathsForSync } from "@/utils/memcardWorkspace/gciPathsForSync";
+import { selectionSetForSelectAllImportable } from "@/utils/selectAllImportable";
+import { useMemcardIpcListeners } from "@/hooks/memcard/useMemcardIpcListeners";
+import { useMemcardSelectionDerived } from "@/hooks/memcard/useMemcardSelectionDerived";
+
+const FOLDER_SCAN_DEBOUNCE_MS = 500;
 
 export function useMemcardWorkspace() {
   const { enqueueSnackbar } = useSnackbar();
+  useMemcardIpcListeners(enqueueSnackbar);
+
   const [gciFolder, setGciFolder] = useState<string | null>(null);
   const [rawPath, setRawPath] = useState<string | null>(null);
   const [events, setEvents] = useState<string[]>([]);
@@ -63,41 +75,15 @@ export function useMemcardWorkspace() {
       setCandidates(r.entries);
       setCardStats(r.cardStats);
       setSelectedPaths((prev) => {
-        const importable = new Set(
-          r.entries
-            .filter((e) => !e.parseError && !e.alreadyOnCard)
-            .map((e) => e.path),
+        const { next, lastImportable, previousPaths } = nextSelectionAfterScan(
+          prev,
+          r.entries,
+          lastImportableRef.current,
+          previousPathsRef.current,
+          userTouchedSelectionRef.current,
         );
-        const next = new Set<string>();
-        const prevImp = lastImportableRef.current;
-        const prevPathsSnapshot = previousPathsRef.current;
-        const prevPathsStale =
-          !userTouchedSelectionRef.current &&
-          prev.size === 0 &&
-          prevPathsSnapshot.size > 0;
-        const prevPaths = prevPathsStale
-          ? new Set<string>()
-          : prevPathsSnapshot;
-        for (const p of importable) {
-          const brandNewInFolder = !prevPaths.has(p);
-          const newlyImportable = !prevImp.has(p);
-          if (brandNewInFolder || newlyImportable) {
-            next.add(p);
-          } else if (prev.has(p)) {
-            next.add(p);
-          }
-        }
-        for (const e of r.entries) {
-          if (e.parseError || !e.alreadyOnCard) continue;
-          const p = e.path;
-          if (prev.has(p)) {
-            next.add(p);
-          } else if (!prevPaths.has(p)) {
-            next.add(p);
-          }
-        }
-        lastImportableRef.current = importable;
-        previousPathsRef.current = new Set(r.entries.map((e) => e.path));
+        lastImportableRef.current = lastImportable;
+        previousPathsRef.current = previousPaths;
         return next;
       });
     } finally {
@@ -122,7 +108,8 @@ export function useMemcardWorkspace() {
         autoBuildRaw: s.autoBuildRaw,
         autoCopyToSd: s.autoCopyToSd,
         confirmBeforeSdCopy: s.confirmBeforeSdCopy,
-        gciFilenameSanitize: (s.gciFilenameSanitize ?? "none") as GciFilenameSanitizeStyle,
+        gciFilenameSanitize: (s.gciFilenameSanitize ??
+          "none") as GciFilenameSanitizeStyle,
       });
     })();
     return () => {
@@ -135,47 +122,6 @@ export function useMemcardWorkspace() {
       console.log("[main]", msg);
     });
   }, []);
-
-  useEffect(() => {
-    const u1 = window.memcard.onBatchBuilt(({ outputs, errors }) => {
-      if (outputs.length > 0) {
-        enqueueSnackbar(
-          `Built ${outputs.length} memory card image(s): ${outputs.map((o) => o.gameCode).join(", ")}`,
-          { variant: "success" },
-        );
-      }
-      for (const err of errors) {
-        enqueueSnackbar(err, { variant: "warning" });
-      }
-    });
-    const u2 = window.memcard.onBatchBuildError(({ error }) => {
-      enqueueSnackbar(`Auto-build failed: ${error}`, { variant: "error" });
-    });
-    const u3 = window.memcard.onVolumeMounted(({ mountPath, savesDir }) => {
-      enqueueSnackbar(`SD / volume ready: ${mountPath} → ${savesDir}`, {
-        variant: "info",
-      });
-    });
-    const u4 = window.memcard.onVolumeUnmounted(({ mountPath }) => {
-      enqueueSnackbar(`Volume ejected: ${mountPath}`, { variant: "default" });
-    });
-    const u5 = window.memcard.onSdTransferDone(({ destPath }) => {
-      enqueueSnackbar(`Copied to SD: ${destPath}`, { variant: "success" });
-    });
-    const u6 = window.memcard.onSdTransferError(({ error, localPath }) => {
-      enqueueSnackbar(`SD copy failed (${localPath}): ${error}`, {
-        variant: "error",
-      });
-    });
-    return () => {
-      u1();
-      u2();
-      u3();
-      u4();
-      u5();
-      u6();
-    };
-  }, [enqueueSnackbar]);
 
   useEffect(() => {
     void runScan();
@@ -191,7 +137,7 @@ export function useMemcardWorkspace() {
       scanDebounceRef.current = setTimeout(() => {
         scanDebounceRef.current = null;
         void runScan();
-      }, 500);
+      }, FOLDER_SCAN_DEBOUNCE_MS);
     });
     return () => {
       unsub();
@@ -224,7 +170,7 @@ export function useMemcardWorkspace() {
 
   const updatePipeline = useCallback(
     async (partial: Partial<PipelineSettingsState>) => {
-      setPipeline((p) => ({ ...p, ...partial }));
+      setPipeline((prev) => ({ ...prev, ...partial }));
       await window.memcard.mergeUserSettings(partial);
     },
     [],
@@ -254,17 +200,10 @@ export function useMemcardWorkspace() {
       });
       return;
     }
-    const gciPathsToAdd = candidates
-      .filter(
-        (c) => selectedPaths.has(c.path) && !c.alreadyOnCard && !c.parseError,
-      )
-      .sort((a, b) => b.mtimeMs - a.mtimeMs)
-      .map((c) => c.path);
-    const gciPathsToRemove = candidates
-      .filter(
-        (c) => !selectedPaths.has(c.path) && c.alreadyOnCard && !c.parseError,
-      )
-      .map((c) => c.path);
+    const { gciPathsToAdd, gciPathsToRemove } = gciPathsForSync(
+      candidates,
+      selectedPaths,
+    );
     if (gciPathsToAdd.length === 0 && gciPathsToRemove.length === 0) {
       enqueueSnackbar(
         "Nothing to apply — checked list already matches the target .raw",
@@ -327,93 +266,18 @@ export function useMemcardWorkspace() {
     }
   };
 
-  const pendingAddCount = candidates.filter(
-    (c) => selectedPaths.has(c.path) && !c.alreadyOnCard && !c.parseError,
-  ).length;
-
-  const pendingRemoveCount = candidates.filter(
-    (c) => !selectedPaths.has(c.path) && c.alreadyOnCard && !c.parseError,
-  ).length;
-
-  const pendingChangeCount = pendingAddCount + pendingRemoveCount;
-
-  const selectedForSummary = candidates.filter(
-    (c) => selectedPaths.has(c.path) && !c.alreadyOnCard && !c.parseError,
-  );
-
-  const pendingRemovalSummary = candidates.filter(
-    (c) => !selectedPaths.has(c.path) && c.alreadyOnCard && !c.parseError,
-  );
-
-  const checkedOnCardSummary = candidates.filter(
-    (c) => selectedPaths.has(c.path) && c.alreadyOnCard && !c.parseError,
-  );
-
-  const hasImportable = candidates.some(
-    (c) => !c.parseError && !c.alreadyOnCard,
-  );
-
-  const selectionInvalidReason = useMemo(() => {
-    if (!cardStats) return null;
-    const pickedAdd = candidates.filter(
-      (c) => selectedPaths.has(c.path) && !c.parseError && !c.alreadyOnCard,
-    );
-    const pickedRemove = candidates.filter(
-      (c) => !selectedPaths.has(c.path) && !c.parseError && c.alreadyOnCard,
-    );
-    if (pickedAdd.length === 0 && pickedRemove.length === 0) return null;
-    const finalDirCount =
-      cardStats.directoryFileCount - pickedRemove.length + pickedAdd.length;
-    if (finalDirCount > MAX_CARD_DIRECTORY_FILES) {
-      return `After this change the card would have ${finalDirCount} save slots used (max ${MAX_CARD_DIRECTORY_FILES}).`;
-    }
-    const blocksFreed = pickedRemove.reduce((s, c) => s + c.blockCount, 0);
-    const blocksNeeded = pickedAdd.reduce((s, c) => s + c.blockCount, 0);
-    const netFree = cardStats.freeBlocks + blocksFreed - blocksNeeded;
-    if (netFree < 0) {
-      return `Not enough free blocks: need ${blocksNeeded} for new saves, but only ${cardStats.freeBlocks + blocksFreed} blocks are available after freeing removals.`;
-    }
-    return null;
-  }, [cardStats, candidates, selectedPaths]);
-
-  const importButtonTooltip = useMemo(() => {
-    if (!rawPath)
-      return "Choose a target Nintendont .raw file in the Target section above.";
-    if (!gciFolder)
-      return "Choose a folder of .gci files in the Source section above.";
-    if (selectionInvalidReason) return selectionInvalidReason;
-    if (pendingChangeCount > 0) return "";
-    return "Check or uncheck rows so the list matches what you want on the target .raw, then apply.";
-  }, [rawPath, gciFolder, selectionInvalidReason, pendingChangeCount]);
-
   const selectAllImportable = () => {
     if (!cardStats) return;
-    const next = new Set<string>();
-    for (const c of candidates) {
-      if (c.parseError) continue;
-      if (c.alreadyOnCard) {
-        next.add(c.path);
-      }
-    }
-    let usedSlots = 0;
-    let usedBlocks = 0;
-    const { directoryFileCount: dirCount, freeBlocks } = cardStats;
-    for (const c of candidates) {
-      if (c.parseError || c.alreadyOnCard) continue;
-      if (dirCount + usedSlots + 1 > MAX_CARD_DIRECTORY_FILES) break;
-      if (usedBlocks + c.blockCount > freeBlocks) break;
-      next.add(c.path);
-      usedSlots += 1;
-      usedBlocks += c.blockCount;
-    }
-    setSelectedPaths(next);
+    setSelectedPaths(selectionSetForSelectAllImportable(candidates, cardStats));
   };
 
-  const importDisabled =
-    !rawPath ||
-    !gciFolder ||
-    pendingChangeCount === 0 ||
-    selectionInvalidReason != null;
+  const derived = useMemcardSelectionDerived(
+    candidates,
+    selectedPaths,
+    cardStats,
+    rawPath,
+    gciFolder,
+  );
 
   return {
     gciFolder,
@@ -437,16 +301,16 @@ export function useMemcardWorkspace() {
     importSelected,
     toggleWatch,
     testBackup,
-    pendingAddCount,
-    pendingRemoveCount,
-    pendingChangeCount,
-    selectedForSummary,
-    pendingRemovalSummary,
-    checkedOnCardSummary,
-    hasImportable,
-    selectionInvalidReason,
-    importButtonTooltip,
+    pendingAddCount: derived.pendingAddCount,
+    pendingRemoveCount: derived.pendingRemoveCount,
+    pendingChangeCount: derived.pendingChangeCount,
+    selectedForSummary: derived.selectedForSummary,
+    pendingRemovalSummary: derived.pendingRemovalSummary,
+    checkedOnCardSummary: derived.checkedOnCardSummary,
+    hasImportable: derived.hasImportable,
+    selectionInvalidReason: derived.selectionInvalidReason,
+    importButtonTooltip: derived.importButtonTooltip,
     selectAllImportable,
-    importDisabled,
+    importDisabled: derived.importDisabled,
   };
 }

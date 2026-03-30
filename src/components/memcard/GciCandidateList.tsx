@@ -1,13 +1,14 @@
+import { useMemo } from "react";
 import {
   Box,
   Checkbox,
-  FormControlLabel,
   FormGroup,
   Paper,
   Tooltip,
   Typography,
 } from "@mui/material";
 import type { GciFolderEntry } from "@/types/memcard";
+import { formatFolderRelativeTime } from "@/utils/formatFolderRelativeTime";
 
 type GciCandidateListProps = {
   candidates: GciFolderEntry[];
@@ -26,6 +27,15 @@ export function GciCandidateList({
   rawPath,
   onTogglePath,
 }: GciCandidateListProps) {
+  const sorted = useMemo(
+    () =>
+      [...candidates].sort(
+        (a, b) =>
+          b.mtimeMs - a.mtimeMs || a.path.localeCompare(b.path, "en"),
+      ),
+    [candidates],
+  );
+
   return (
     <Paper
       sx={{
@@ -46,10 +56,11 @@ export function GciCandidateList({
         color="text.secondary"
         sx={{ mb: 1.5 }}
       >
-        Newest first. <strong>Checked</strong> = should be on the target{" "}
-        <code>.raw</code> (saves already on the card start checked). Uncheck
-        an on-card save to remove it on apply; check a new <code>.gci</code> to
-        add it.
+        Newest at top (same order as &quot;Select all importable&quot;).{" "}
+        <strong>Checked</strong> = should be on the target <code>.raw</code>{" "}
+        (saves already on the card start checked). Uncheck an on-card save to
+        remove it on apply; check a new <code>.gci</code> to add it. Times use
+        each file&apos;s modified date from the folder.
       </Typography>
 
       {!scanning && gciFolder && rawPath && candidates.length === 0 && (
@@ -64,17 +75,28 @@ export function GciCandidateList({
         </Typography>
       )}
 
-      {candidates.length > 0 && (
-        <FormGroup>
-          {candidates.map((c) => {
+      {sorted.length > 0 && (
+        <FormGroup sx={{ gap: 0 }}>
+          {sorted.map((c) => {
             const canToggle = !c.parseError;
             const checked = canToggle && selectedPaths.has(c.path);
-            const rowLabel = (
-              <Box>
+            const checkbox = (
+              <Checkbox
+                checked={checked}
+                disabled={!canToggle}
+                onChange={(_, v) => onTogglePath(c.path, v)}
+                size="small"
+                color={c.alreadyOnCard && checked ? "success" : "primary"}
+                sx={{ p: 0.5 }}
+                inputProps={{ "aria-label": c.fileName }}
+              />
+            );
+            const main = (
+              <Box sx={{ minWidth: 0 }}>
                 <Typography
                   variant="body2"
                   component="span"
-                  sx={{ wordBreak: "break-all" }}
+                  sx={{ wordBreak: "break-word" }}
                 >
                   {c.fileName}
                 </Typography>
@@ -83,20 +105,26 @@ export function GciCandidateList({
                   color="text.secondary"
                   display="block"
                 >
-                  {c.saveName && c.saveName !== c.fileName ? `${c.saveName} — ` : ""}
+                  {c.saveName && c.saveName !== c.fileName
+                    ? `${c.saveName} — `
+                    : ""}
                   {c.parseError}
                   {c.alreadyOnCard && !c.parseError && "already on this .raw"}
                 </Typography>
               </Box>
             );
-            const checkbox = (
-              <Checkbox
-                checked={checked}
-                disabled={!canToggle}
-                onChange={(_, v) => onTogglePath(c.path, v)}
-                size="small"
-                color={c.alreadyOnCard && checked ? "success" : "primary"}
-              />
+            const when = (
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{
+                  whiteSpace: "nowrap",
+                  textAlign: "right",
+                  pl: 1,
+                }}
+              >
+                {formatFolderRelativeTime(c.mtimeMs)}
+              </Typography>
             );
             return (
               <Tooltip
@@ -108,15 +136,21 @@ export function GciCandidateList({
                 }
                 disableHoverListener={!c.alreadyOnCard || !!c.parseError}
               >
-                <FormControlLabel
-                  control={checkbox}
-                  label={rowLabel}
+                <Box
                   sx={{
-                    alignItems: "flex-start",
-                    ml: 0,
-                    "& .MuiFormControlLabel-label": { pt: 0.25 },
+                    display: "grid",
+                    gridTemplateColumns: "auto minmax(0, 1fr) auto",
+                    alignItems: "center",
+                    columnGap: 1,
+                    py: 0.75,
+                    borderBottom: 1,
+                    borderColor: "divider",
                   }}
-                />
+                >
+                  {checkbox}
+                  {main}
+                  {when}
+                </Box>
               </Tooltip>
             );
           })}

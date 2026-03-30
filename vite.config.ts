@@ -1,6 +1,7 @@
 import { rmSync } from 'node:fs'
 import path from 'node:path'
 import { defineConfig } from 'vite'
+import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import electron from 'vite-plugin-electron/simple'
 import pkg from './package.json'
@@ -20,6 +21,7 @@ export default defineConfig(({ command }) => {
       },
     },
     plugins: [
+      tailwindcss(),
       react(),
       electron({
         main: {

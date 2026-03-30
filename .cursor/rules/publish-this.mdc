@@ -1,0 +1,18 @@
+---
+description: When the user says "publish this" (or publish / cut a release / ship) for this repo
+globs:
+alwaysApply: false
+---
+
+# "Publish this" = commit, push, minor release
+
+When the user says **publish this**, **publish**, **cut a release**, or similar in this project, treat it as this **combined workflow** (unless they specify otherwise):
+
+1. **Commit** all current work with a clear message.
+2. **Push** `main` to `origin`.
+3. **Minor semver bump** in `package.json` (and sync `package-lock.json`): e.g. `0.1.0-alpha.1` → `0.2.0-alpha.1` for pre-1.0 alphas.
+4. **Commit** the version bump (`chore: release vX.Y.Z`).
+5. **Annotated tag** `vX.Y.Z` and **push** the tag.
+6. **GitHub Release** for that tag (`gh release create` with short notes, or attach CI artifacts after the workflow runs).
+
+Do not ask them to do these steps manually unless something fails (auth, `gh` missing, etc.).

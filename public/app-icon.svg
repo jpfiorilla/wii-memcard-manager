@@ -9,9 +9,6 @@
       <stop offset="0%" stop-color="#b4c4e0"/>
       <stop offset="100%" stop-color="#6d7fa0"/>
     </linearGradient>
-    <clipPath id="gripZone">
-      <rect x="13" y="41" width="38" height="15" rx="0" />
-    </clipPath>
     <linearGradient id="grooveFill" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#8fa4c4" stop-opacity="0.55"/>
       <stop offset="45%" stop-color="#3d4a5e" stop-opacity="0.88"/>
@@ -22,24 +19,29 @@
       <rect x="13" y="11" width="38" height="45" rx="3.2" ry="3.2" fill="white" />
       <rect x="17.5" y="15.5" width="29" height="25.5" rx="2" ry="2" fill="black" />
       <path fill="black" d="M 32 11.5 L 29.98 14.95 L 34.02 14.95 Z" />
+      <g fill="black">
+        <rect x="13.35" y="41.55" width="4.05" height="1.88" rx="0.65" />
+        <rect x="13.35" y="44.45" width="4.05" height="1.88" rx="0.65" />
+        <rect x="13.35" y="47.35" width="4.05" height="1.88" rx="0.65" />
+        <rect x="13.35" y="50.25" width="4.05" height="1.88" rx="0.65" />
+        <rect x="46.6" y="41.55" width="4.05" height="1.88" rx="0.65" />
+        <rect x="46.6" y="44.45" width="4.05" height="1.88" rx="0.65" />
+        <rect x="46.6" y="47.35" width="4.05" height="1.88" rx="0.65" />
+        <rect x="46.6" y="50.25" width="4.05" height="1.88" rx="0.65" />
+      </g>
     </mask>
   </defs>
   <rect x="17.5" y="15.5" width="29" height="25.5" rx="2" ry="2" fill="url(#recess)" opacity="0.75" />
-  <rect width="64" height="64" fill="url(#plastic)" mask="url(#chassis)" />
-  <!-- Pull grips: horizontal grooves in side margins (surface only; no mask cutout) -->
-  <g clip-path="url(#gripZone)">
-    <g stroke-linecap="round">
-      <rect x="13.45" y="41.85" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <rect x="13.45" y="43.95" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <rect x="13.45" y="46.05" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <rect x="13.45" y="48.15" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <rect x="13.45" y="50.25" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <rect x="46.7" y="41.85" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <rect x="46.7" y="43.95" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <rect x="46.7" y="46.05" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <rect x="46.7" y="48.15" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <rect x="46.7" y="50.25" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <path fill="none" stroke="#c8d6ee" stroke-opacity="0.35" stroke-width="0.28" d="M 13.55 42.15 H 17.2 M 13.55 44.25 H 17.2 M 13.55 46.35 H 17.2 M 13.55 48.45 H 17.2 M 13.55 50.55 H 17.2 M 46.8 42.15 H 50.45 M 46.8 44.25 H 50.45 M 46.8 46.35 H 50.45 M 46.8 48.45 H 50.45 M 46.8 50.55 H 50.45" />
-    </g>
+  <g>
+    <rect x="13.35" y="41.55" width="4.05" height="1.88" rx="0.65" fill="url(#grooveFill)" />
+    <rect x="13.35" y="44.45" width="4.05" height="1.88" rx="0.65" fill="url(#grooveFill)" />
+    <rect x="13.35" y="47.35" width="4.05" height="1.88" rx="0.65" fill="url(#grooveFill)" />
+    <rect x="13.35" y="50.25" width="4.05" height="1.88" rx="0.65" fill="url(#grooveFill)" />
+    <rect x="46.6" y="41.55" width="4.05" height="1.88" rx="0.65" fill="url(#grooveFill)" />
+    <rect x="46.6" y="44.45" width="4.05" height="1.88" rx="0.65" fill="url(#grooveFill)" />
+    <rect x="46.6" y="47.35" width="4.05" height="1.88" rx="0.65" fill="url(#grooveFill)" />
+    <rect x="46.6" y="50.25" width="4.05" height="1.88" rx="0.65" fill="url(#grooveFill)" />
+    <path fill="none" stroke="#c8d6ee" stroke-opacity="0.35" stroke-width="0.28" d="M 13.45 41.8 H 17.3 M 13.45 44.7 H 17.3 M 13.45 47.6 H 17.3 M 13.45 50.5 H 17.3 M 46.7 41.8 H 50.55 M 46.7 44.7 H 50.55 M 46.7 47.6 H 50.55 M 46.7 50.5 H 50.55" />
   </g>
+  <rect width="64" height="64" fill="url(#plastic)" mask="url(#chassis)" />
 </svg>

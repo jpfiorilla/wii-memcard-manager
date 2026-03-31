@@ -1,12 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <!-- Shell + recess + triangle cutout. Ribs are surface grip on app icon only (not silhouette). -->
+  <!-- Monochrome silhouette: grip = horizontal holes in mask. Sized so slots read at ~44px tray (≥~1.3px gap height). -->
   <defs>
     <mask id="chassis">
       <rect width="64" height="64" fill="black" />
       <rect x="13" y="11" width="38" height="45" rx="3.2" ry="3.2" fill="white" />
       <rect x="17.5" y="15.5" width="29" height="25.5" rx="2" ry="2" fill="black" />
-      <!-- Triangle: equilateral, bbox vertically centered in rim y∈[11,15.5] → apex 11.5, base 14.95, s≈4.04 -->
       <path fill="black" d="M 32 11.5 L 29.98 14.95 L 34.02 14.95 Z" />
+      <g fill="black">
+        <rect x="13.35" y="41.55" width="4.05" height="1.88" rx="0.65" />
+        <rect x="13.35" y="44.45" width="4.05" height="1.88" rx="0.65" />
+        <rect x="13.35" y="47.35" width="4.05" height="1.88" rx="0.65" />
+        <rect x="13.35" y="50.25" width="4.05" height="1.88" rx="0.65" />
+        <rect x="46.6" y="41.55" width="4.05" height="1.88" rx="0.65" />
+        <rect x="46.6" y="44.45" width="4.05" height="1.88" rx="0.65" />
+        <rect x="46.6" y="47.35" width="4.05" height="1.88" rx="0.65" />
+        <rect x="46.6" y="50.25" width="4.05" height="1.88" rx="0.65" />
+      </g>
     </mask>
   </defs>
   <rect width="64" height="64" fill="#000000" mask="url(#chassis)" />

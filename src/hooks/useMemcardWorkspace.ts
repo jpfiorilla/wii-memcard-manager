@@ -18,6 +18,11 @@ import { useMemcardSelectionDerived } from "@/hooks/memcard/useMemcardSelectionD
 
 const FOLDER_SCAN_DEBOUNCE_MS = 500;
 
+export type RunScanOptions = {
+  /** After a successful scan, replace selection with the same set as "Select all importable". */
+  selectAllImportableAfter?: boolean;
+};
+
 export function useMemcardWorkspace() {
   const { enqueueSnackbar } = useSnackbar();
   useMemcardIpcListeners(enqueueSnackbar);
@@ -47,6 +52,7 @@ export function useMemcardWorkspace() {
     notificationsEnabled: true,
   });
   const [pipelineSettingsOpen, setPipelineSettingsOpen] = useState(false);
+  const [settingsHydrated, setSettingsHydrated] = useState(false);
 
   useEffect(() => {
     lastImportableRef.current = new Set();
@@ -54,7 +60,7 @@ export function useMemcardWorkspace() {
     userTouchedSelectionRef.current = false;
   }, [gciFolder, rawPath]);
 
-  const runScan = useCallback(async () => {
+  const runScan = useCallback(async (options?: RunScanOptions) => {
     if (!rawPath || !gciFolder) {
       setCandidates([]);
       setSelectedPaths(new Set());
@@ -75,18 +81,33 @@ export function useMemcardWorkspace() {
       }
       setCandidates(r.entries);
       setCardStats(r.cardStats);
-      setSelectedPaths((prev) => {
-        const { next, lastImportable, previousPaths } = nextSelectionAfterScan(
-          prev,
-          r.entries,
-          lastImportableRef.current,
-          previousPathsRef.current,
-          userTouchedSelectionRef.current,
+
+      if (options?.selectAllImportableAfter && r.cardStats) {
+        userTouchedSelectionRef.current = false;
+        const importable = new Set(
+          r.entries
+            .filter((e) => !e.parseError && !e.alreadyOnCard)
+            .map((e) => e.path),
         );
-        lastImportableRef.current = lastImportable;
-        previousPathsRef.current = previousPaths;
-        return next;
-      });
+        lastImportableRef.current = importable;
+        previousPathsRef.current = new Set(r.entries.map((e) => e.path));
+        setSelectedPaths(
+          selectionSetForSelectAllImportable(r.entries, r.cardStats),
+        );
+      } else {
+        setSelectedPaths((prev) => {
+          const { next, lastImportable, previousPaths } = nextSelectionAfterScan(
+            prev,
+            r.entries,
+            lastImportableRef.current,
+            previousPathsRef.current,
+            userTouchedSelectionRef.current,
+          );
+          lastImportableRef.current = lastImportable;
+          previousPathsRef.current = previousPaths;
+          return next;
+        });
+      }
     } finally {
       setScanning(false);
     }
@@ -95,24 +116,28 @@ export function useMemcardWorkspace() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const s = await window.memcard.getUserSettings();
-      if (cancelled) return;
-      if (s.gciFolder) setGciFolder(s.gciFolder);
-      if (s.rawPath) setRawPath(s.rawPath);
-      if (s.gciFolder && s.folderWatchEnabled) {
-        setWatching(true);
+      try {
+        const s = await window.memcard.getUserSettings();
+        if (cancelled) return;
+        if (s.gciFolder) setGciFolder(s.gciFolder);
+        if (s.rawPath) setRawPath(s.rawPath);
+        if (s.gciFolder && s.folderWatchEnabled) {
+          setWatching(true);
+        }
+        setPipeline({
+          stagingDir: s.stagingDir,
+          gciBatchDebounceMs: s.gciBatchDebounceMs,
+          nintendontSavesRelativePath: s.nintendontSavesRelativePath,
+          autoBuildRaw: s.autoBuildRaw,
+          autoCopyToSd: s.autoCopyToSd,
+          confirmBeforeSdCopy: s.confirmBeforeSdCopy,
+          gciFilenameSanitize: (s.gciFilenameSanitize ??
+            "none") as GciFilenameSanitizeStyle,
+          notificationsEnabled: s.notificationsEnabled,
+        });
+      } finally {
+        if (!cancelled) setSettingsHydrated(true);
       }
-      setPipeline({
-        stagingDir: s.stagingDir,
-        gciBatchDebounceMs: s.gciBatchDebounceMs,
-        nintendontSavesRelativePath: s.nintendontSavesRelativePath,
-        autoBuildRaw: s.autoBuildRaw,
-        autoCopyToSd: s.autoCopyToSd,
-        confirmBeforeSdCopy: s.confirmBeforeSdCopy,
-        gciFilenameSanitize: (s.gciFilenameSanitize ??
-          "none") as GciFilenameSanitizeStyle,
-        notificationsEnabled: s.notificationsEnabled,
-      });
     })();
     return () => {
       cancelled = true;
@@ -294,6 +319,7 @@ export function useMemcardWorkspace() {
   return {
     gciFolder,
     rawPath,
+    settingsHydrated,
     events,
     watching,
     candidates,

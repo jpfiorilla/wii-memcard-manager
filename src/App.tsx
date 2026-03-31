@@ -14,6 +14,7 @@ export default function App() {
   const isXs = useMediaQuery(theme.breakpoints.down("sm"));
   const w = useMemcardWorkspace();
   const pipelineReady = Boolean(w.gciFolder && w.rawPath);
+  const workspaceActive = w.settingsHydrated && pipelineReady;
 
   return (
     <Box
@@ -44,6 +45,7 @@ export default function App() {
 
       <SourceTargetPipeline
         isNarrow={isSourceTargetStacked}
+        settingsHydrated={w.settingsHydrated}
         gciFolder={w.gciFolder}
         rawPath={w.rawPath}
         watching={w.watching}
@@ -55,11 +57,11 @@ export default function App() {
 
       <Box
         sx={{
-          opacity: pipelineReady ? 1 : 0.38,
+          opacity: workspaceActive ? 1 : 0.38,
           transition: theme.transitions.create("opacity", {
             duration: theme.transitions.duration.shorter,
           }),
-          pointerEvents: pipelineReady ? "auto" : "none",
+          pointerEvents: workspaceActive ? "auto" : "none",
         }}
       >
         <ScanToolbar
@@ -68,7 +70,7 @@ export default function App() {
           scanning={w.scanning}
           hasImportable={w.hasImportable}
           cardStats={w.cardStats}
-          onRescan={w.runScan}
+          onRescan={() => void w.runScan({ selectAllImportableAfter: true })}
           onSelectAllImportable={w.selectAllImportable}
         />
 

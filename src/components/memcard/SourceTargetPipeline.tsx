@@ -4,6 +4,7 @@ import {
   Collapse,
   IconButton,
   Paper,
+  Skeleton,
   Stack,
   Tooltip,
   Typography,
@@ -16,6 +17,8 @@ import { PipelineArrow } from "./PipelineArrow";
 
 type SourceTargetPipelineProps = {
   isNarrow: boolean;
+  /** False until persisted source/target (and pipeline prefs) load from the main process. */
+  settingsHydrated: boolean;
   gciFolder: string | null;
   rawPath: string | null;
   watching: boolean;
@@ -33,6 +36,7 @@ function lastPathSegment(p: string) {
 
 export function SourceTargetPipeline({
   isNarrow,
+  settingsHydrated,
   gciFolder,
   rawPath,
   watching,
@@ -48,6 +52,7 @@ export function SourceTargetPipeline({
   return (
     <Paper
       elevation={0}
+      aria-busy={!settingsHydrated}
       sx={{
         mb: 2,
         overflow: "hidden",
@@ -57,7 +62,36 @@ export function SourceTargetPipeline({
         borderColor: "divider",
       }}
     >
-      <Collapse in={!pipelineReady} timeout={t} unmountOnExit>
+      {!settingsHydrated ? (
+        <Box sx={{ p: 2 }}>
+          <Skeleton variant="text" width={140} sx={{ mb: 1.5 }} />
+          <Stack
+            spacing={2}
+            alignItems="stretch"
+            sx={{
+              flexDirection: "column",
+              [theme.breakpoints.up(400)]: {
+                flexDirection: "row",
+              },
+            }}
+          >
+            <Skeleton variant="rounded" height={112} sx={{ flex: 1 }} />
+            <Skeleton
+              variant="rounded"
+              width={40}
+              height={40}
+              sx={{
+                alignSelf: "center",
+                flexShrink: 0,
+                display: isNarrow ? "none" : "block",
+              }}
+            />
+            <Skeleton variant="rounded" height={112} sx={{ flex: 1 }} />
+          </Stack>
+        </Box>
+      ) : (
+        <>
+      <Collapse appear={false} in={!pipelineReady} timeout={t} unmountOnExit>
         <Box sx={{ p: 2 }}>
           <Stack
             spacing={0}
@@ -187,7 +221,7 @@ export function SourceTargetPipeline({
         </Box>
       </Collapse>
 
-      <Collapse in={pipelineReady} timeout={t} unmountOnExit>
+      <Collapse appear={false} in={pipelineReady} timeout={t} unmountOnExit>
         <Box
           sx={{
             px: 2,
@@ -219,7 +253,11 @@ export function SourceTargetPipeline({
               </Typography>
             </Stack>
           </Tooltip>
-          <Typography variant="body2" color="text.disabled" sx={{ flexShrink: 0 }}>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ flexShrink: 0, fontWeight: 600, opacity: 0.95 }}
+          >
             →
           </Typography>
           <Tooltip title={rawPath ?? ""}>
@@ -256,6 +294,8 @@ export function SourceTargetPipeline({
           </Stack>
         </Box>
       </Collapse>
+        </>
+      )}
     </Paper>
   );
 }

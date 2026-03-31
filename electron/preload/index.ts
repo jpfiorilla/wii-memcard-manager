@@ -61,6 +61,8 @@ contextBridge.exposeInMainWorld('memcard', {
     confirmBeforeSdCopy?: boolean
     requireNintendontPath?: boolean
     gciFilenameSanitize?: 'none' | 'ascii-title' | 'ascii-upper' | 'ascii-lower' | 'tmce-short'
+    notificationsEnabled?: boolean
+    gciPathOverrides?: Record<string, 'neutral' | 'exclude' | 'include'>
   }) => ipcRenderer.invoke('memcard:mergeUserSettings', partial),
   pickDirectory: (defaultPath?: string | null) =>
     ipcRenderer.invoke('memcard:pickDirectory', defaultPath),

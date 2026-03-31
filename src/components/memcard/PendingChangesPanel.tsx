@@ -68,7 +68,7 @@ export function PendingChangesPanel({
         <Typography variant="body2" color="text.secondary">
           {candidates.length === 0
             ? "Nothing yet."
-            : "No changes — toggle some saves."}
+            : "No changes — plan matches the card."}
         </Typography>
       ) : (
         <>

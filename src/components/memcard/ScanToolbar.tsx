@@ -14,17 +14,15 @@ type ScanToolbarProps = {
   gciFolder: string | null;
   rawPath: string | null;
   scanning: boolean;
-  hasImportable: boolean;
   cardStats: { directoryFileCount: number; freeBlocks: number } | null;
   onRescan: () => void;
-  onSelectAllImportable: () => void;
+  onSelectAllImportable: () => void | Promise<void>;
 };
 
 export function ScanToolbar({
   gciFolder,
   rawPath,
   scanning,
-  hasImportable,
   cardStats,
   onRescan,
   onSelectAllImportable,
@@ -65,23 +63,17 @@ export function ScanToolbar({
         >
           Rescan
         </Button>
-        <Tooltip title="Checks saves that fit on the card (prefers newest).">
+        <Tooltip title="Clears forced include/exclude so automatic picks use newest-first importable rules only.">
           <span>
             <Button
               variant="outlined"
               color="secondary"
               startIcon={<SelectAllIcon />}
-              onClick={onSelectAllImportable}
-              disabled={
-                !gciFolder ||
-                !rawPath ||
-                scanning ||
-                !hasImportable ||
-                !cardStats
-              }
+              onClick={() => void onSelectAllImportable()}
+              disabled={!gciFolder || !rawPath || scanning || !cardStats}
               sx={{ minWidth: { sm: 160 } }}
             >
-              Select all importable
+              Reset overrides
             </Button>
           </span>
         </Tooltip>

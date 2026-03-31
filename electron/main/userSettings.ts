@@ -2,6 +2,8 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { app } from 'electron'
 
+export type GciPathOverride = 'neutral' | 'exclude' | 'include'
+
 const FILE_NAME = 'memcard-user-settings.json'
 
 export type MemcardUserSettings = {
@@ -27,6 +29,24 @@ export type MemcardUserSettings = {
   gciFilenameSanitize: 'none' | 'ascii-title' | 'ascii-upper' | 'ascii-lower' | 'tmce-short'
   /** macOS/Windows: show Electron Notification Center messages (SD, batch build, volume). */
   notificationsEnabled: boolean
+  /** Absolute .gci paths → override (omit key = neutral automatic behavior). */
+  gciPathOverrides: Record<string, GciPathOverride>
+}
+
+function sanitizeGciPathOverrides(
+  raw: unknown,
+): Record<string, GciPathOverride> {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {}
+  }
+  const out: Record<string, GciPathOverride> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof k !== 'string' || k.length === 0) continue
+    if (v === 'exclude' || v === 'include' || v === 'neutral') {
+      out[k] = v
+    }
+  }
+  return out
 }
 
 const defaults: MemcardUserSettings = {
@@ -43,6 +63,7 @@ const defaults: MemcardUserSettings = {
   requireNintendontPath: true,
   gciFilenameSanitize: 'none',
   notificationsEnabled: true,
+  gciPathOverrides: {},
 }
 
 function filePath(): string {
@@ -73,6 +94,8 @@ function merge(a: MemcardUserSettings, partial: Partial<MemcardUserSettings>): M
       partial.gciFilenameSanitize !== undefined ? partial.gciFilenameSanitize : a.gciFilenameSanitize,
     notificationsEnabled:
       partial.notificationsEnabled !== undefined ? partial.notificationsEnabled : a.notificationsEnabled,
+    gciPathOverrides:
+      partial.gciPathOverrides !== undefined ? partial.gciPathOverrides : a.gciPathOverrides,
   }
 }
 
@@ -110,6 +133,7 @@ export async function readUserSettings(): Promise<MemcardUserSettings> {
           : defaults.gciFilenameSanitize,
       notificationsEnabled:
         typeof parsed.notificationsEnabled === 'boolean' ? parsed.notificationsEnabled : defaults.notificationsEnabled,
+      gciPathOverrides: sanitizeGciPathOverrides(parsed.gciPathOverrides),
     })
   } catch {
     return { ...defaults }

@@ -68,7 +68,6 @@ export default function App() {
           gciFolder={w.gciFolder}
           rawPath={w.rawPath}
           scanning={w.scanning}
-          hasImportable={w.hasImportable}
           cardStats={w.cardStats}
           onRescan={() => void w.runScan({ selectAllImportableAfter: true })}
           onSelectAllImportable={w.selectAllImportable}
@@ -87,10 +86,11 @@ export default function App() {
           <GciCandidateList
             candidates={w.candidates}
             selectedPaths={w.selectedPaths}
+            pathOverrides={w.pathOverrides}
             scanning={w.scanning}
             gciFolder={w.gciFolder}
             rawPath={w.rawPath}
-            onTogglePath={w.togglePath}
+            onPathOverride={w.setPathOverride}
           />
 
           <PendingChangesPanel

@@ -63,7 +63,7 @@ export function useMemcardSelectionDerived(
     } else if (pendingChangeCount > 0) {
       importButtonTooltip = "";
     } else {
-      importButtonTooltip = "Change some checkboxes first.";
+      importButtonTooltip = "Change overrides or wait for a different plan first.";
     }
 
     const importDisabled =

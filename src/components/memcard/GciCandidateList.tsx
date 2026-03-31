@@ -110,6 +110,9 @@ export function GciCandidateList({
   const compactPaneMaxHeight = 240;
   const expandedPaneMaxHeight =
     "min(70vh, 560px, calc(100vh - 320px))";
+  const overrideToggleTooltipSlotProps = {
+    slotProps: { tooltip: { sx: { maxWidth: 320 } } },
+  } as const;
 
   return (
     <Box
@@ -209,84 +212,99 @@ export function GciCandidateList({
                       },
                     }}
                   >
-                    <ToggleButton
-                      value="exclude"
-                      aria-label="Never include"
-                      title="Never include (skipped by auto picks)"
-                      sx={(t) => ({
-                        bgcolor: alpha(t.palette.error.main, 0.06),
-                        color: alpha(t.palette.error.light, 0.32),
-                        borderColor: alpha(t.palette.error.main, 0.18),
-                        "&:not(.Mui-selected):hover": {
-                          bgcolor: alpha(t.palette.error.main, 0.12),
-                          color: alpha(t.palette.error.light, 0.45),
-                        },
-                        "&.Mui-selected": {
-                          color: t.palette.error.contrastText,
-                          bgcolor: t.palette.error.main,
-                          borderColor: t.palette.error.main,
-                          boxShadow: `inset 0 0 0 1px ${alpha("#fff", 0.28)}`,
-                          "&:hover": {
-                            bgcolor: t.palette.error.dark,
-                            borderColor: t.palette.error.dark,
-                          },
-                        },
-                      })}
+                    <Tooltip
+                      placement="top"
+                      title="Exclude from auto picks."
+                      {...overrideToggleTooltipSlotProps}
                     >
-                      <BlockOutlinedIcon sx={{ fontSize: 18 }} />
-                    </ToggleButton>
-                    <ToggleButton
-                      value="neutral"
-                      aria-label="Automatic"
-                      title="Automatic (newest-first importable rules)"
-                      sx={(t) => ({
-                        bgcolor: alpha(t.palette.secondary.dark, 0.42),
-                        color: alpha(t.palette.text.secondary, 0.55),
-                        borderColor: alpha(t.palette.secondary.main, 0.28),
-                        "&:not(.Mui-selected):hover": {
-                          bgcolor: alpha(t.palette.secondary.dark, 0.55),
-                          color: alpha(t.palette.text.secondary, 0.72),
-                        },
-                        "&.Mui-selected": {
-                          color: alpha(t.palette.text.primary, 0.88),
-                          bgcolor: alpha(t.palette.secondary.dark, 0.72),
-                          borderColor: alpha(t.palette.secondary.light, 0.4),
-                          boxShadow: "none",
-                          "&:hover": {
-                            bgcolor: alpha(t.palette.secondary.dark, 0.82),
-                            borderColor: alpha(t.palette.secondary.light, 0.5),
+                      <ToggleButton
+                        value="exclude"
+                        aria-label="Never include"
+                        sx={(t) => ({
+                          bgcolor: alpha(t.palette.error.main, 0.06),
+                          color: alpha(t.palette.error.light, 0.32),
+                          borderColor: alpha(t.palette.error.main, 0.18),
+                          "&:not(.Mui-selected):hover": {
+                            bgcolor: alpha(t.palette.error.main, 0.12),
+                            color: alpha(t.palette.error.light, 0.45),
                           },
-                        },
-                      })}
-                    >
-                      <RemoveCircleOutlineIcon sx={{ fontSize: 18 }} />
-                    </ToggleButton>
-                    <ToggleButton
-                      value="include"
-                      aria-label="Always include"
-                      title="Always include (even if older)"
-                      sx={(t) => ({
-                        bgcolor: alpha(t.palette.success.main, 0.07),
-                        color: alpha(t.palette.success.main, 0.35),
-                        borderColor: alpha(t.palette.success.main, 0.2),
-                        "&:not(.Mui-selected):hover": {
-                          bgcolor: alpha(t.palette.success.main, 0.14),
-                          color: alpha(t.palette.success.light, 0.5),
-                        },
-                        "&.Mui-selected": {
-                          color: t.palette.success.contrastText,
-                          bgcolor: t.palette.success.main,
-                          borderColor: t.palette.success.main,
-                          boxShadow: `inset 0 0 0 1px ${alpha("#fff", 0.28)}`,
-                          "&:hover": {
-                            bgcolor: alpha(t.palette.success.main, 0.88),
-                            borderColor: alpha(t.palette.success.main, 0.95),
+                          "&.Mui-selected": {
+                            color: t.palette.error.contrastText,
+                            bgcolor: t.palette.error.main,
+                            borderColor: t.palette.error.main,
+                            boxShadow: `inset 0 0 0 1px ${alpha("#fff", 0.28)}`,
+                            "&:hover": {
+                              bgcolor: t.palette.error.dark,
+                              borderColor: t.palette.error.dark,
+                            },
                           },
-                        },
-                      })}
+                        })}
+                      >
+                        <BlockOutlinedIcon sx={{ fontSize: 18 }} />
+                      </ToggleButton>
+                    </Tooltip>
+                    <Tooltip
+                      placement="top"
+                      title="Automatic (default)."
+                      {...overrideToggleTooltipSlotProps}
                     >
-                      <AddCircleOutlineIcon sx={{ fontSize: 18 }} />
-                    </ToggleButton>
+                      <ToggleButton
+                        value="neutral"
+                        aria-label="Automatic"
+                        sx={(t) => ({
+                          bgcolor: alpha(t.palette.common.white, 0.04),
+                          color: alpha(t.palette.text.secondary, 0.4),
+                          borderColor: alpha(t.palette.divider, 0.65),
+                          "&:not(.Mui-selected):hover": {
+                            bgcolor: alpha(t.palette.common.white, 0.07),
+                            color: alpha(t.palette.text.secondary, 0.52),
+                          },
+                          "&.Mui-selected": {
+                            color: alpha(t.palette.text.primary, 0.58),
+                            bgcolor: alpha(t.palette.common.white, 0.08),
+                            borderColor: alpha(t.palette.common.white, 0.14),
+                            boxShadow: "none",
+                            "&:hover": {
+                              bgcolor: alpha(t.palette.common.white, 0.1),
+                              borderColor: alpha(t.palette.common.white, 0.18),
+                            },
+                          },
+                        })}
+                      >
+                        <RemoveCircleOutlineIcon sx={{ fontSize: 18 }} />
+                      </ToggleButton>
+                    </Tooltip>
+                    <Tooltip
+                      placement="top"
+                      title="Always include (even if older)."
+                      {...overrideToggleTooltipSlotProps}
+                    >
+                      <ToggleButton
+                        value="include"
+                        aria-label="Always include"
+                        sx={(t) => ({
+                          bgcolor: alpha(t.palette.success.main, 0.07),
+                          color: alpha(t.palette.success.main, 0.35),
+                          borderColor: alpha(t.palette.success.main, 0.2),
+                          "&:not(.Mui-selected):hover": {
+                            bgcolor: alpha(t.palette.success.main, 0.14),
+                            color: alpha(t.palette.success.light, 0.5),
+                          },
+                          "&.Mui-selected": {
+                            color: t.palette.success.contrastText,
+                            bgcolor: t.palette.success.main,
+                            borderColor: t.palette.success.main,
+                            boxShadow: `inset 0 0 0 1px ${alpha("#fff", 0.28)}`,
+                            "&:hover": {
+                              bgcolor: alpha(t.palette.success.main, 0.88),
+                              borderColor: alpha(t.palette.success.main, 0.95),
+                            },
+                          },
+                        })}
+                      >
+                        <AddCircleOutlineIcon sx={{ fontSize: 18 }} />
+                      </ToggleButton>
+                    </Tooltip>
                   </ToggleButtonGroup>
                 ) : (
                   <Box sx={{ width: 96, flexShrink: 0 }} aria-hidden />

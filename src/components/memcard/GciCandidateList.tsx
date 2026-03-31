@@ -320,20 +320,16 @@ export function GciCandidateList({
                     >
                       {c.fileName}
                     </Typography>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      display="block"
-                    >
-                      {[
-                        c.saveName && c.saveName !== c.fileName
-                          ? c.saveName
-                          : null,
-                        c.parseError || null,
-                      ]
-                        .filter(Boolean)
-                        .join(" — ")}
-                    </Typography>
+                    {c.parseError ? (
+                      <Typography
+                        variant="caption"
+                        color="error"
+                        display="block"
+                        sx={{ overflowWrap: "anywhere" }}
+                      >
+                        {c.parseError}
+                      </Typography>
+                    ) : null}
                   </Box>
                 );
 

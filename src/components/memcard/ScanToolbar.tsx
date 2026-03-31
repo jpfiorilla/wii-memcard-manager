@@ -1,4 +1,12 @@
-import { Box, Button, CircularProgress, Paper, Stack, Tooltip, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  CircularProgress,
+  Paper,
+  Stack,
+  Tooltip,
+} from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SelectAllIcon from "@mui/icons-material/SelectAll";
 
@@ -21,6 +29,8 @@ export function ScanToolbar({
   onRescan,
   onSelectAllImportable,
 }: ScanToolbarProps) {
+  const theme = useTheme();
+
   return (
     <Paper
       elevation={3}
@@ -40,29 +50,23 @@ export function ScanToolbar({
       }}
     >
       <Stack
-        direction={{ xs: "column", sm: "row" }}
+        direction="row"
+        flexWrap="wrap"
         spacing={1.5}
-        alignItems="stretch"
+        alignItems="center"
+        useFlexGap
       >
         <Button
           variant="outlined"
           startIcon={<RefreshIcon />}
           onClick={() => void onRescan()}
           disabled={!gciFolder || !rawPath || scanning}
-          sx={{
-            minWidth: { sm: 140 },
-            alignSelf: { xs: "stretch", sm: "center" },
-          }}
+          sx={{ minWidth: { sm: 140 } }}
         >
           Rescan
         </Button>
         <Tooltip title="Checks saves that fit on the card (prefers newest).">
-          <Box
-            sx={{
-              display: "flex",
-              alignSelf: { xs: "stretch", sm: "center" },
-            }}
-          >
+          <span>
             <Button
               variant="outlined"
               color="secondary"
@@ -79,17 +83,29 @@ export function ScanToolbar({
             >
               Select all importable
             </Button>
-          </Box>
+          </span>
         </Tooltip>
+        {scanning && (
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              flexShrink: 0,
+              // CircularProgress uses stroke: currentColor on the root; default color="primary"
+              // forces palette.primary.main via MUI styles and overrides naive sx. Inherit from here.
+              color: theme.palette.primary.light,
+            }}
+            aria-live="polite"
+          >
+            <CircularProgress
+              color="inherit"
+              size={20}
+              thickness={4}
+              aria-label="Scanning folder"
+            />
+          </Box>
+        )}
       </Stack>
-      {scanning && (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1 }}>
-          <CircularProgress size={16} />
-          <Typography variant="caption" color="text.secondary">
-            Scanning folder…
-          </Typography>
-        </Box>
-      )}
     </Paper>
   );
 }

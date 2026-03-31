@@ -37,25 +37,44 @@ export function GciCandidateList({
       ),
     [candidates],
   );
+  const hasRows = sorted.length > 0;
+  const compactPaneMaxHeight = 240;
+  const expandedPaneMaxHeight =
+    "min(70vh, 560px, calc(100vh - 320px))";
 
   return (
-    <Paper
+    <Box
       sx={{
-        p: 2,
-        flex: 1,
         width: "100%",
         minWidth: 0,
-        minHeight: 0,
-        maxHeight: "min(70vh, 560px)",
-        [theme.breakpoints.up(400)]: {
-          flex: "2 1 0",
-          maxHeight: "calc(100vh - 320px)",
-        },
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
+        flex: hasRows ? 1 : "0 0 auto",
+        alignSelf: hasRows ? "stretch" : "flex-start",
+        minHeight: 0,
+        maxHeight: hasRows ? expandedPaneMaxHeight : `${compactPaneMaxHeight}px`,
+        transition: theme.transitions.create("max-height", {
+          duration: theme.transitions.duration.standard,
+          easing: theme.transitions.easing.sharp,
+        }),
+        [theme.breakpoints.up(400)]: {
+          flex: hasRows ? "2 1 0" : "0 0 auto",
+        },
       }}
     >
+      <Paper
+        sx={{
+          p: 2,
+          flex: hasRows ? 1 : "0 0 auto",
+          minHeight: 0,
+          width: "100%",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          height: hasRows ? "100%" : "auto",
+        }}
+      >
       <Box sx={{ flexShrink: 0 }}>
         <Typography variant="subtitle1" gutterBottom>
           Saves
@@ -82,7 +101,7 @@ export function GciCandidateList({
         )}
       </Box>
 
-      {sorted.length > 0 && (
+      {hasRows && (
         <Box
           sx={{
             flex: 1,
@@ -173,5 +192,6 @@ export function GciCandidateList({
         </Box>
       )}
     </Paper>
+    </Box>
   );
 }

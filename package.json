@@ -1,7 +1,7 @@
 {
   "name": "wii-memcard-manager",
   "productName": "Wii Memcard Manager",
-  "version": "0.12.0-alpha.1",
+  "version": "0.13.0-alpha.1",
   "main": "dist-electron/main/index.js",
   "description": "Desktop tool for .gci / .raw workflows with Nintendont (TM:CE GTME.raw, etc.)",
   "author": "",

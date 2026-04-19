@@ -21,6 +21,21 @@ npm run dev
 npm run build
 ```
 
+## macOS: “damaged and can’t be opened”
+
+Releases are **not** signed with an Apple Developer ID or notarized. macOS Gatekeeper may show that message for downloaded apps; it usually means **quarantine / unsigned**, not a bad download.
+
+- **Remove quarantine** (after copying the app to Applications):
+
+  ```bash
+  xattr -cr "/Applications/Wii Memcard Manager.app"
+  ```
+
+- Or open **System Settings → Privacy & Security** and use **Open Anyway** when the app is blocked.
+- Or **right-click** the app → **Open** → confirm once.
+
+CI builds run an **ad-hoc** `codesign` step to reduce this; seamless installs without extra steps require **Developer ID signing + notarization** (paid Apple Developer account).
+
 ## Stack
 
 - Electron, Vite, React, TypeScript

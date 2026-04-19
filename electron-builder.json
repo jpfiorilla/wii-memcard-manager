@@ -1,5 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "afterSign": "scripts/afterSignAdhoc.cjs",
   "appId": "com.jpfiorilla.wii-memcard-manager",
   "asar": true,
   "directories": {

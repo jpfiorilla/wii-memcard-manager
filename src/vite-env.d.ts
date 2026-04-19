@@ -6,6 +6,8 @@ export type MemcardFolderEvent = {
   filePath: string
 }
 
+export type GciPathOverride = 'neutral' | 'exclude' | 'include'
+
 export type MemcardUserSettings = {
   gciFolder: string | null
   rawPath: string | null
@@ -20,6 +22,7 @@ export type MemcardUserSettings = {
   requireNintendontPath: boolean
   gciFilenameSanitize: 'none' | 'ascii-title' | 'ascii-upper' | 'ascii-lower' | 'tmce-short'
   notificationsEnabled: boolean
+  gciPathOverrides: Record<string, GciPathOverride>
 }
 
 export type GciDentryDescription = {

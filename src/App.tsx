@@ -13,6 +13,8 @@ export default function App() {
   const isSourceTargetStacked = useMediaQuery(theme.breakpoints.down(400));
   const isXs = useMediaQuery(theme.breakpoints.down("sm"));
   const w = useMemcardWorkspace();
+  const pipelineReady = Boolean(w.gciFolder && w.rawPath);
+  const workspaceActive = w.settingsHydrated && pipelineReady;
 
   return (
     <Box
@@ -43,6 +45,7 @@ export default function App() {
 
       <SourceTargetPipeline
         isNarrow={isSourceTargetStacked}
+        settingsHydrated={w.settingsHydrated}
         gciFolder={w.gciFolder}
         rawPath={w.rawPath}
         watching={w.watching}
@@ -52,49 +55,58 @@ export default function App() {
         onTestBackup={() => void w.testBackup()}
       />
 
-      <ScanToolbar
-        gciFolder={w.gciFolder}
-        rawPath={w.rawPath}
-        scanning={w.scanning}
-        hasImportable={w.hasImportable}
-        cardStats={w.cardStats}
-        onRescan={w.runScan}
-        onSelectAllImportable={w.selectAllImportable}
-      />
-
-      <Stack
+      <Box
         sx={{
-          gap: 2,
-          flexDirection: "column",
-          alignItems: "stretch",
-          [theme.breakpoints.up(400)]: {
-            flexDirection: "row",
-          },
+          opacity: workspaceActive ? 1 : 0.38,
+          transition: theme.transitions.create("opacity", {
+            duration: theme.transitions.duration.shorter,
+          }),
+          pointerEvents: workspaceActive ? "auto" : "none",
         }}
       >
-        <GciCandidateList
-          candidates={w.candidates}
-          selectedPaths={w.selectedPaths}
-          scanning={w.scanning}
+        <ScanToolbar
           gciFolder={w.gciFolder}
           rawPath={w.rawPath}
-          onTogglePath={w.togglePath}
-        />
-
-        <PendingChangesPanel
+          scanning={w.scanning}
           cardStats={w.cardStats}
-          candidates={w.candidates}
-          pendingChangeCount={w.pendingChangeCount}
-          pendingAddCount={w.pendingAddCount}
-          pendingRemoveCount={w.pendingRemoveCount}
-          selectedForSummary={w.selectedForSummary}
-          pendingRemovalSummary={w.pendingRemovalSummary}
-          checkedOnCardSummary={w.checkedOnCardSummary}
-          watching={w.watching}
-          events={w.events}
+          onRescan={() => void w.runScan({ selectAllImportableAfter: true })}
+          onSelectAllImportable={w.selectAllImportable}
         />
-      </Stack>
 
+        <Stack
+          sx={{
+            gap: 2,
+            flexDirection: "column",
+            alignItems: "stretch",
+            [theme.breakpoints.up(400)]: {
+              flexDirection: "row",
+            },
+          }}
+        >
+          <GciCandidateList
+            candidates={w.candidates}
+            selectedPaths={w.selectedPaths}
+            pathOverrides={w.pathOverrides}
+            scanning={w.scanning}
+            gciFolder={w.gciFolder}
+            rawPath={w.rawPath}
+            onPathOverride={w.setPathOverride}
+          />
+
+          <PendingChangesPanel
+            cardStats={w.cardStats}
+            candidates={w.candidates}
+            pendingChangeCount={w.pendingChangeCount}
+            pendingAddCount={w.pendingAddCount}
+            pendingRemoveCount={w.pendingRemoveCount}
+            selectedForSummary={w.selectedForSummary}
+            pendingRemovalSummary={w.pendingRemovalSummary}
+            checkedOnCardSummary={w.checkedOnCardSummary}
+            watching={w.watching}
+            events={w.events}
+          />
+        </Stack>
+      </Box>
     </Box>
   );
 }

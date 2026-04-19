@@ -9,37 +9,13 @@
       <stop offset="0%" stop-color="#b4c4e0"/>
       <stop offset="100%" stop-color="#6d7fa0"/>
     </linearGradient>
-    <clipPath id="gripZone">
-      <rect x="13" y="41" width="38" height="15" rx="0" />
-    </clipPath>
-    <linearGradient id="grooveFill" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#8fa4c4" stop-opacity="0.55"/>
-      <stop offset="45%" stop-color="#3d4a5e" stop-opacity="0.88"/>
-      <stop offset="100%" stop-color="#2a3344" stop-opacity="0.92"/>
-    </linearGradient>
     <mask id="chassis">
       <rect width="64" height="64" fill="black" />
-      <rect x="13" y="11" width="38" height="45" rx="3.2" ry="3.2" fill="white" />
+      <path fill="white" d="M 16.2 11 L 47.8 11 A 3.2 3.2 0 0 1 51 14.2 L 51 40 L 51.075 40.350 L 51.279 40.700 L 51.561 41.050 L 51.846 41.400 L 52.061 41.750 L 52.149 42.100 L 52.089 42.450 L 51.894 42.800 L 51.617 43.150 L 51.329 43.500 L 51.105 43.850 L 51.003 44.200 L 51.049 44.550 L 51.232 44.900 L 51.505 45.250 L 51.795 45.600 L 52.028 45.950 L 52.144 46.300 L 52.111 46.650 L 51.940 47.000 L 51.673 47.350 L 51.381 47.700 L 51.140 48.050 L 51.011 48.400 L 51.029 48.750 L 51.189 49.100 L 51.449 49.450 L 51.742 49.800 L 51.991 50.150 L 52.133 50.500 L 52.129 50.850 L 51.982 51.200 L 51.728 51.550 L 51.435 51.900 L 51.179 52.250 L 51.025 52.600 L 51 52.8 A 3.2 3.2 0 0 1 47.8 56 L 16.2 56 A 3.2 3.2 0 0 1 13 52.8 L 12.925 52.450 L 12.721 52.100 L 12.439 51.750 L 12.154 51.400 L 11.939 51.050 L 11.851 50.700 L 11.911 50.350 L 12.106 50.000 L 12.383 49.650 L 12.671 49.300 L 12.895 48.950 L 12.997 48.600 L 12.951 48.250 L 12.768 47.900 L 12.495 47.550 L 12.205 47.200 L 11.972 46.850 L 11.856 46.500 L 11.889 46.150 L 12.060 45.800 L 12.327 45.450 L 12.619 45.100 L 12.860 44.750 L 12.989 44.400 L 12.971 44.050 L 12.811 43.700 L 12.551 43.350 L 12.258 43.000 L 12.009 42.650 L 11.867 42.300 L 11.871 41.950 L 12.018 41.600 L 12.272 41.250 L 12.565 40.900 L 12.821 40.550 L 12.975 40.200 L 13 40 L 13 14.2 A 3.2 3.2 0 0 1 16.2 11 Z" />
       <rect x="17.5" y="15.5" width="29" height="25.5" rx="2" ry="2" fill="black" />
       <path fill="black" d="M 32 11.5 L 29.98 14.95 L 34.02 14.95 Z" />
     </mask>
   </defs>
   <rect x="17.5" y="15.5" width="29" height="25.5" rx="2" ry="2" fill="url(#recess)" opacity="0.75" />
   <rect width="64" height="64" fill="url(#plastic)" mask="url(#chassis)" />
-  <!-- Pull grips: horizontal grooves in side margins (surface only; no mask cutout) -->
-  <g clip-path="url(#gripZone)">
-    <g stroke-linecap="round">
-      <rect x="13.45" y="41.85" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <rect x="13.45" y="43.95" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <rect x="13.45" y="46.05" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <rect x="13.45" y="48.15" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <rect x="13.45" y="50.25" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <rect x="46.7" y="41.85" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <rect x="46.7" y="43.95" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <rect x="46.7" y="46.05" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <rect x="46.7" y="48.15" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <rect x="46.7" y="50.25" width="3.85" height="1.05" rx="0.52" fill="url(#grooveFill)" />
-      <path fill="none" stroke="#c8d6ee" stroke-opacity="0.35" stroke-width="0.28" d="M 13.55 42.15 H 17.2 M 13.55 44.25 H 17.2 M 13.55 46.35 H 17.2 M 13.55 48.45 H 17.2 M 13.55 50.55 H 17.2 M 46.8 42.15 H 50.45 M 46.8 44.25 H 50.45 M 46.8 46.35 H 50.45 M 46.8 48.45 H 50.45 M 46.8 50.55 H 50.45" />
-    </g>
-  </g>
 </svg>

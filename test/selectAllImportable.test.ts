@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { selectionSetForSelectAllImportable } from '../src/utils/selectAllImportable'
+import {
+  deriveSelectionFromOverrides,
+  selectionSetForSelectAllImportable,
+} from '../src/utils/selectAllImportable'
 import type { GciFolderEntry } from '../src/types/memcard'
 
 function entry(p: Partial<GciFolderEntry> & Pick<GciFolderEntry, 'path' | 'alreadyOnCard'>): GciFolderEntry {
@@ -115,5 +118,35 @@ describe('selectionSetForSelectAllImportable', () => {
     expect(sel.has('/a/huge.gci')).toBe(false)
     expect(sel.has('/a/small.gci')).toBe(true)
     expect(sel.has('/a/on.gci')).toBe(false)
+  })
+
+  it('include override forces older not-on-card file into selection', () => {
+    const oldForced = entry({
+      path: '/a/old.gci',
+      alreadyOnCard: false,
+      mtimeMs: 1,
+      blockCount: 4,
+    })
+    const newer = entry({
+      path: '/a/new.gci',
+      alreadyOnCard: false,
+      mtimeMs: 100,
+      blockCount: 4,
+    })
+    const onCard = entry({
+      path: '/a/on.gci',
+      alreadyOnCard: true,
+      mtimeMs: 50,
+      blockCount: 4,
+    })
+    const candidates = [newer, oldForced, onCard]
+    const sel = deriveSelectionFromOverrides(
+      candidates,
+      { directoryFileCount: 10, freeBlocks: 100 },
+      { '/a/old.gci': 'include' },
+    )
+    expect(sel.has('/a/old.gci')).toBe(true)
+    expect(sel.has('/a/new.gci')).toBe(true)
+    expect(sel.has('/a/on.gci')).toBe(true)
   })
 })

@@ -1,3 +1,6 @@
+/** Per-file override for automatic importable selection. */
+export type GciPathOverride = "neutral" | "exclude" | "include";
+
 export type GciFolderEntry = {
   path: string
   fileName: string

@@ -16,6 +16,7 @@ import { peekPendingSdAll, removePendingByLocalPath } from './pendingSdQueue'
 import { showMemcardNotification } from './notifications'
 import { copyLocalRawToSdSaves, isPathInsideRoot } from './sdTransfer'
 import { startVolumeWatcherMacos, stopVolumeWatcher } from './volumeWatcher'
+import { getWiiSyncStatus, reconfigureWiiSync } from './wiiSync'
 
 export type MemcardFolderEvent = {
   rootDir: string
@@ -286,6 +287,7 @@ export async function resumeMemcardSession() {
     await startFolderWatch(s.gciFolder)
   }
   reconfigureVolumeWatcher()
+  await reconfigureWiiSync(broadcast)
   await processPendingSdOnAllVolumes()
 }
 
@@ -362,9 +364,14 @@ export function registerMemcardIpc() {
 
   ipcMain.handle('memcard:getUserSettings', async () => readUserSettings())
 
+  ipcMain.handle('memcard:getWiiSyncStatus', async () => getWiiSyncStatus())
+
   ipcMain.handle('memcard:mergeUserSettings', async (_event, partial: Partial<MemcardUserSettings>) => {
     const next = await mergeUserSettings(partial)
     reconfigureVolumeWatcher()
+    if (partial.wiiSyncEnabled !== undefined || partial.wiiSyncPort !== undefined) {
+      await reconfigureWiiSync(broadcast)
+    }
     await processPendingSdOnAllVolumes()
     return next
   })

@@ -31,6 +31,10 @@ export type MemcardUserSettings = {
   notificationsEnabled: boolean
   /** Absolute .gci paths → override (omit key = neutral automatic behavior). */
   gciPathOverrides: Record<string, GciPathOverride>
+  /** Serve staged .raw images to the Wii "TM Sync" app over the LAN. */
+  wiiSyncEnabled: boolean
+  /** HTTP port for TM Sync (UDP discovery is always 8643). */
+  wiiSyncPort: number
 }
 
 function sanitizeGciPathOverrides(
@@ -49,6 +53,10 @@ function sanitizeGciPathOverrides(
   return out
 }
 
+function isValidPort(n: unknown): n is number {
+  return typeof n === 'number' && Number.isInteger(n) && n >= 1024 && n <= 65535
+}
+
 const defaults: MemcardUserSettings = {
   gciFolder: null,
   rawPath: null,
@@ -64,6 +72,8 @@ const defaults: MemcardUserSettings = {
   gciFilenameSanitize: 'none',
   notificationsEnabled: true,
   gciPathOverrides: {},
+  wiiSyncEnabled: true,
+  wiiSyncPort: 8642,
 }
 
 function filePath(): string {
@@ -96,6 +106,8 @@ function merge(a: MemcardUserSettings, partial: Partial<MemcardUserSettings>): M
       partial.notificationsEnabled !== undefined ? partial.notificationsEnabled : a.notificationsEnabled,
     gciPathOverrides:
       partial.gciPathOverrides !== undefined ? partial.gciPathOverrides : a.gciPathOverrides,
+    wiiSyncEnabled: partial.wiiSyncEnabled !== undefined ? partial.wiiSyncEnabled : a.wiiSyncEnabled,
+    wiiSyncPort: partial.wiiSyncPort !== undefined ? partial.wiiSyncPort : a.wiiSyncPort,
   }
 }
 
@@ -134,6 +146,9 @@ export async function readUserSettings(): Promise<MemcardUserSettings> {
       notificationsEnabled:
         typeof parsed.notificationsEnabled === 'boolean' ? parsed.notificationsEnabled : defaults.notificationsEnabled,
       gciPathOverrides: sanitizeGciPathOverrides(parsed.gciPathOverrides),
+      wiiSyncEnabled:
+        typeof parsed.wiiSyncEnabled === 'boolean' ? parsed.wiiSyncEnabled : defaults.wiiSyncEnabled,
+      wiiSyncPort: isValidPort(parsed.wiiSyncPort) ? parsed.wiiSyncPort : defaults.wiiSyncPort,
     })
   } catch {
     return { ...defaults }

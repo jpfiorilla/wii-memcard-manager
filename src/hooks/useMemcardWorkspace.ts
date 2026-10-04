@@ -49,6 +49,8 @@ export function useMemcardWorkspace() {
     confirmBeforeSdCopy: false,
     gciFilenameSanitize: "none",
     notificationsEnabled: true,
+    wiiSyncEnabled: true,
+    wiiSyncPort: 8642,
   });
   const [pipelineSettingsOpen, setPipelineSettingsOpen] = useState(false);
   const [settingsHydrated, setSettingsHydrated] = useState(false);
@@ -120,6 +122,8 @@ export function useMemcardWorkspace() {
           gciFilenameSanitize: (s.gciFilenameSanitize ??
             "none") as GciFilenameSanitizeStyle,
           notificationsEnabled: s.notificationsEnabled,
+          wiiSyncEnabled: s.wiiSyncEnabled,
+          wiiSyncPort: s.wiiSyncPort,
         });
       } finally {
         if (!cancelled) setSettingsHydrated(true);

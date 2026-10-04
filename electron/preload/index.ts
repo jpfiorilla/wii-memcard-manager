@@ -63,6 +63,8 @@ contextBridge.exposeInMainWorld('memcard', {
     gciFilenameSanitize?: 'none' | 'ascii-title' | 'ascii-upper' | 'ascii-lower' | 'tmce-short'
     notificationsEnabled?: boolean
     gciPathOverrides?: Record<string, 'neutral' | 'exclude' | 'include'>
+    wiiSyncEnabled?: boolean
+    wiiSyncPort?: number
   }) => ipcRenderer.invoke('memcard:mergeUserSettings', partial),
   pickDirectory: (defaultPath?: string | null) =>
     ipcRenderer.invoke('memcard:pickDirectory', defaultPath),
@@ -138,6 +140,17 @@ contextBridge.exposeInMainWorld('memcard', {
       callback(data)
     ipcRenderer.on('memcard:sd-transfer-error', listener)
     return () => ipcRenderer.removeListener('memcard:sd-transfer-error', listener)
+  },
+  getWiiSyncStatus: () => ipcRenderer.invoke('memcard:getWiiSyncStatus'),
+  onWiiSyncStatus: (callback: (data: unknown) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data)
+    ipcRenderer.on('memcard:wii-sync-status', listener)
+    return () => ipcRenderer.removeListener('memcard:wii-sync-status', listener)
+  },
+  onWiiSyncDelivered: (callback: (data: unknown) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data)
+    ipcRenderer.on('memcard:wii-sync-delivered', listener)
+    return () => ipcRenderer.removeListener('memcard:wii-sync-delivered', listener)
   },
 })
 

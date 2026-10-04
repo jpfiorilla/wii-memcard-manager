@@ -17,6 +17,7 @@ import {
 } from "@mui/material";
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 import type { PipelineSettingsState } from "@/types/memcard";
+import { WiiSyncSection } from "./WiiSyncSection";
 
 type PipelineSettingsDialogProps = {
   open: boolean;
@@ -186,6 +187,7 @@ export function PipelineSettingsDialog({
             label="Confirm each file before SD copy (dialog)"
           />
         </Stack>
+        <WiiSyncSection pipeline={pipeline} updatePipeline={updatePipeline} />
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2 }}>
         <Button variant="contained" onClick={onClose}>

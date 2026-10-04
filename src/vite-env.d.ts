@@ -23,7 +23,35 @@ export type MemcardUserSettings = {
   gciFilenameSanitize: 'none' | 'ascii-title' | 'ascii-upper' | 'ascii-lower' | 'tmce-short'
   notificationsEnabled: boolean
   gciPathOverrides: Record<string, GciPathOverride>
+  wiiSyncEnabled: boolean
+  wiiSyncPort: number
 }
+
+export type WiiSyncRequestLog = {
+  at: number
+  remoteAddress: string | undefined
+  fileName: string
+  status: number
+}
+
+export type WiiSyncStatus = {
+  enabled: boolean
+  running: boolean
+  port: number | null
+  discovery: boolean
+  addresses: string[]
+  error: string | null
+  lastRequest: WiiSyncRequestLog | null
+}
+
+export type WiiSyncDelivery = {
+  fileName: string
+  localPath: string
+  etag: string
+  bytes: number
+  remoteAddress: string | undefined
+}
+
 
 export type GciDentryDescription = {
   gameCode: string
@@ -84,6 +112,9 @@ export type MemcardApi = {
   onVolumeUnmounted: (callback: (data: { mountPath: string }) => void) => () => void
   onSdTransferDone: (callback: (data: { destPath: string; localPath: string }) => void) => () => void
   onSdTransferError: (callback: (data: { error: string; localPath: string }) => void) => () => void
+  getWiiSyncStatus: () => Promise<WiiSyncStatus>
+  onWiiSyncStatus: (callback: (data: WiiSyncStatus) => void) => () => void
+  onWiiSyncDelivered: (callback: (data: WiiSyncDelivery) => void) => () => void
 }
 
 declare global {

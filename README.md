@@ -8,6 +8,13 @@ Early scaffold: folder watching (Drive / export folders), pick target `.raw`, **
 
 Agent-oriented cheat sheet (always-on Cursor rule): [`.cursor/rules/wii-memcard-manager-brief.mdc`](.cursor/rules/wii-memcard-manager-brief.mdc).
 
+## Wii TM Sync (Wi-Fi)
+
+The app runs a small LAN server (HTTP `8642`, UDP discovery `8643`) that serves the newest staged
+`<GAME>.raw`. The companion Homebrew Channel app in [`tm-sync/`](tm-sync/README.md) pulls it right before
+booting Slippi Nintendont, only when its checksum changed, and boots normally on any failure.
+Toggle it under Settings → Wii TM Sync.
+
 ## Develop
 
 ```bash

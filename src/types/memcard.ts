@@ -33,4 +33,7 @@ export type PipelineSettingsState = {
   gciFilenameSanitize: GciFilenameSanitizeStyle
   /** OS + in-app alerts from background pipeline (batch, SD, volumes). */
   notificationsEnabled: boolean
+  /** Serve staged .raw files to the Wii TM Sync app over Wi-Fi. */
+  wiiSyncEnabled: boolean
+  wiiSyncPort: number
 }

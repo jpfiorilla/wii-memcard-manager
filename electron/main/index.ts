@@ -50,7 +50,7 @@ let tray: Tray | null = null
 const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
 
-async function createWindow() {
+async function createWindow(startHidden = false) {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
   win = new BrowserWindow({
     title: 'Wii Memcard Manager',
@@ -79,7 +79,7 @@ async function createWindow() {
 
   win.once('ready-to-show', () => {
     win?.maximize()
-    win?.show()
+    if (!startHidden) win?.show()
   })
 
   // Test actively push message to the Electron-Renderer
@@ -99,8 +99,35 @@ async function createWindow() {
 
 registerMemcardIpc()
 
+/**
+ * Packaged macOS builds run as a background menu-bar app: registered as a login item the first
+ * time they launch (toggle in the tray menu), and started without a window when macOS opens them
+ * at login so the folder watch and Wii sync just run.
+ */
+const LOGIN_ITEM_MARKER = () => path.join(app.getPath('userData'), '.login-item-configured')
+
+function ensureLoginItemOnFirstRun() {
+  if (process.platform !== 'darwin' || !app.isPackaged) return
+  if (fs.existsSync(LOGIN_ITEM_MARKER())) return
+  app.setLoginItemSettings({ openAtLogin: true })
+  try {
+    fs.writeFileSync(LOGIN_ITEM_MARKER(), new Date().toISOString())
+  } catch {
+    /* ignore */
+  }
+}
+
+function launchedAtLogin(): boolean {
+  if (process.platform !== 'darwin' || !app.isPackaged) return false
+  // wasOpenedAtLogin is unreliable on macOS 13+, so also treat "just booted" as a login launch.
+  return Boolean(app.getLoginItemSettings().wasOpenedAtLogin) || os.uptime() < 300
+}
+
 app.whenReady().then(async () => {
-  createWindow()
+  ensureLoginItemOnFirstRun()
+  const startHidden = launchedAtLogin()
+  if (startHidden) app.dock?.hide()
+  createWindow(startHidden)
   await resumeMemcardSession()
   if (process.platform === 'darwin') {
     const img = createTrayMenuBarImage(process.env.APP_ROOT, process.env.VITE_PUBLIC)
@@ -108,7 +135,7 @@ app.whenReady().then(async () => {
       console.error('[tray] Icon image is empty; menu bar tray may not appear')
     }
     tray = new Tray(img)
-    tray.setToolTip('Wii Memcard Manager — saves folder watch and SD copy')
+    tray.setToolTip('Wii Memcard Manager — building and serving GTME.raw to the Wii')
     const showMainWindow = () => {
       app.dock?.show()
       if (win) {
@@ -118,13 +145,24 @@ app.whenReady().then(async () => {
         void createWindow()
       }
     }
-    tray.setContextMenu(
+    const buildTrayMenu = () =>
       Menu.buildFromTemplate([
         { label: 'Show', click: () => showMainWindow() },
         { type: 'separator' },
+        {
+          label: 'Open at Login',
+          type: 'checkbox',
+          checked: app.getLoginItemSettings().openAtLogin,
+          enabled: app.isPackaged,
+          click: (item) => {
+            app.setLoginItemSettings({ openAtLogin: item.checked })
+            tray?.setContextMenu(buildTrayMenu())
+          },
+        },
+        { type: 'separator' },
         { label: 'Quit', click: () => app.quit() },
-      ]),
-    )
+      ])
+    tray.setContextMenu(buildTrayMenu())
   }
 })
 

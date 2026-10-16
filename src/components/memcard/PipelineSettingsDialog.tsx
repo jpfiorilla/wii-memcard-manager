@@ -6,7 +6,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControlLabel,
+  Divider,
   MenuItem,
   Stack,
   Switch,
@@ -47,7 +47,7 @@ export function PipelineSettingsDialog({
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs" aria-labelledby="settings-title">
       <DialogTitle id="settings-title">Settings</DialogTitle>
       <DialogContent dividers>
-        <Stack spacing={2.5}>
+        <Stack useFlexGap sx={{ gap: 2.5 }}>
           <TextField
             label="Recordings on the card"
             type="number"
@@ -76,24 +76,26 @@ export function PipelineSettingsDialog({
             ))}
           </TextField>
 
-          <Box>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={pipeline.autoOrganizeGcis}
-                  onChange={(_, v) => void updatePipeline({ autoOrganizeGcis: v })}
-                  size="small"
-                />
-              }
-              label="File older recordings by opponent"
+          <Box
+            component="label"
+            sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, cursor: "pointer" }}
+          >
+            <Switch
+              checked={pipeline.autoOrganizeGcis}
+              onChange={(_, v) => void updatePipeline({ autoOrganizeGcis: v })}
+              size="small"
             />
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", ml: 5.5 }}>
-              Anything past the newest {pipeline.maxReplaysPerCard} moves into a folder like{" "}
-              <code>Falco/</code>. Nothing is deleted.
-            </Typography>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+              <Typography variant="body1">File older recordings by opponent</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Anything past the newest {pipeline.maxReplaysPerCard} moves into a folder like{" "}
+                <code>Falco/</code>. Nothing is deleted.
+              </Typography>
+            </Box>
           </Box>
+          <Divider />
+          <WiiSyncSection />
         </Stack>
-        <WiiSyncSection />
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} variant="contained">

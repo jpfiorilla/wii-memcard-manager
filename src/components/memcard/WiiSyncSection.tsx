@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Box, Divider, Typography } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import type { WiiSyncStatus } from "@/vite-env";
 
 /** Read-only status of the server the Wii's TM Sync app pulls the card from. */
@@ -29,14 +29,13 @@ export function WiiSyncSection() {
         : "Off";
 
   return (
-    <Box sx={{ mt: 2.5 }}>
-      <Divider sx={{ mb: 2 }} />
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
       <Typography variant="subtitle2">Wii sync</Typography>
       <Typography variant="body2" color={status?.error ? "error" : "text.secondary"}>
         {line}
       </Typography>
       {last && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+        <Typography variant="caption" color="text.secondary">
           Last pull {new Date(last.at).toLocaleTimeString()}:{" "}
           {last.status === 304 ? "already up to date" : last.status === 200 ? "sent new card" : last.status}
         </Typography>

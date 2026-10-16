@@ -10,7 +10,7 @@ export type GciFolderEntry = {
   blockCount: number
   mtimeMs: number
   /** TM:CE recording metadata (characters as Melee CKIND ids), when decodable. */
-  tmce?: { hmn: number; cpu: number; name: string } | null
+  tmce?: { hmn: number; hmnCostume: number; cpu: number; cpuCostume: number; name: string } | null
 }
 
 export type CardScanStats = {

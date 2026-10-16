@@ -8,7 +8,7 @@ type GciFolderEntry = {
   parseError: string | null
   blockCount: number
   mtimeMs: number
-  tmce?: { hmn: number; cpu: number; name: string } | null
+  tmce?: { hmn: number; hmnCostume: number; cpu: number; cpuCostume: number; name: string } | null
 }
 
 type GciFolderScanCardStats = {

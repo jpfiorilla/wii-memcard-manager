@@ -34,14 +34,27 @@ export function characterLabel(ckind: number): string | null {
   return CHARACTERS[ckind]?.[1] ?? null;
 }
 
-export function CharacterIcon({ ckind, size = 20 }: { ckind: number; size?: number }) {
+/** Per-costume stock icons live in public/charactericons/<slug>/<costume>.png (0 = default). */
+export function CharacterIcon({
+  ckind,
+  costume = 0,
+  size = 20,
+}: {
+  ckind: number;
+  costume?: number;
+  size?: number;
+}) {
   const entry = CHARACTERS[ckind];
   if (!entry) return null;
   const [slug, label] = entry;
   return (
     <Box
       component="img"
-      src={`${import.meta.env.BASE_URL}charactericons/${slug}.png`}
+      src={`${import.meta.env.BASE_URL}charactericons/${slug}/${costume}.png`}
+      onError={(e) => {
+        const img = e.currentTarget as HTMLImageElement;
+        if (!img.src.endsWith("/0.png")) img.src = `${import.meta.env.BASE_URL}charactericons/${slug}/0.png`;
+      }}
       alt={label}
       draggable={false}
       sx={{ width: size, height: size, imageRendering: "pixelated", display: "block", flexShrink: 0 }}
@@ -52,12 +65,16 @@ export function CharacterIcon({ ckind, size = 20 }: { ckind: number; size?: numb
 /** "Marth vs Falco" pair: you on the left, the CPU on the right. */
 export function MatchupIcons({
   hmn,
+  hmnCostume = 0,
   cpu,
+  cpuCostume = 0,
   name,
   size = 20,
 }: {
   hmn: number;
+  hmnCostume?: number;
   cpu: number;
+  cpuCostume?: number;
   name?: string;
   size?: number;
 }) {
@@ -68,11 +85,11 @@ export function MatchupIcons({
   return (
     <Tooltip title={title}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }} aria-label={title}>
-        <CharacterIcon ckind={hmn} size={size} />
+        <CharacterIcon ckind={hmn} costume={hmnCostume} size={size} />
         <Box component="span" sx={{ fontSize: 10, color: "text.secondary", px: 0.25 }}>
           vs
         </Box>
-        <CharacterIcon ckind={cpu} size={size} />
+        <CharacterIcon ckind={cpu} costume={cpuCostume} size={size} />
       </Box>
     </Tooltip>
   );

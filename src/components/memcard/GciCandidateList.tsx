@@ -333,7 +333,13 @@ export function GciCandidateList({
                 const main = (
                   <Box sx={{ minWidth: 0, display: "flex", alignItems: "center", gap: 1 }}>
                     {c.tmce ? (
-                      <MatchupIcons hmn={c.tmce.hmn} cpu={c.tmce.cpu} name={c.tmce.name} />
+                      <MatchupIcons
+                        hmn={c.tmce.hmn}
+                        hmnCostume={c.tmce.hmnCostume}
+                        cpu={c.tmce.cpu}
+                        cpuCostume={c.tmce.cpuCostume}
+                        name={c.tmce.name}
+                      />
                     ) : null}
                     <Box sx={{ minWidth: 0 }}>
                     <Typography

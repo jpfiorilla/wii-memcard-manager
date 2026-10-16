@@ -16,7 +16,7 @@ export type GciFolderEntry = {
   /** File mtime for newest-first ordering. */
   mtimeMs: number
   /** TM:CE recording metadata (characters as Melee CKIND ids), when decodable. */
-  tmce?: { hmn: number; cpu: number; name: string } | null
+  tmce?: { hmn: number; hmnCostume: number; cpu: number; cpuCostume: number; name: string } | null
 }
 
 export type GciFolderScanCardStats = {
@@ -111,7 +111,9 @@ export async function scanGciFolderAgainstRaw(
       parseError: null,
       blockCount,
       mtimeMs,
-      tmce: h ? { hmn: h.hmn, cpu: h.cpu, name: h.name } : null,
+      tmce: h
+        ? { hmn: h.hmn, hmnCostume: h.hmnCostume, cpu: h.cpu, cpuCostume: h.cpuCostume, name: h.name }
+        : null,
     })
   }
 

@@ -25,6 +25,9 @@ export type MemcardUserSettings = {
   gciPathOverrides: Record<string, GciPathOverride>
   wiiSyncEnabled: boolean
   wiiSyncPort: number
+  maxReplaysPerCard: number
+  autoOrganizeGcis: boolean
+  mainCharacter: number
 }
 
 export type WiiSyncRequestLog = {

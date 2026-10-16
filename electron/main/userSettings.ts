@@ -35,6 +35,12 @@ export type MemcardUserSettings = {
   wiiSyncEnabled: boolean
   /** HTTP port for TM Sync (UDP discovery is always 8643). */
   wiiSyncPort: number
+  /** Newest root recordings that go on the built card (keeps TM:CE from running out of space). */
+  maxReplaysPerCard: number
+  /** After a build, file older root TM:CE recordings into opponent folders (e.g. `Falco/`). */
+  autoOrganizeGcis: boolean
+  /** Melee external character ID (CKIND) you play; its opponent names the folder. 9 = Marth. */
+  mainCharacter: number
 }
 
 function sanitizeGciPathOverrides(
@@ -74,6 +80,9 @@ const defaults: MemcardUserSettings = {
   gciPathOverrides: {},
   wiiSyncEnabled: true,
   wiiSyncPort: 8642,
+  maxReplaysPerCard: 25,
+  autoOrganizeGcis: true,
+  mainCharacter: 9,
 }
 
 function filePath(): string {
@@ -108,6 +117,11 @@ function merge(a: MemcardUserSettings, partial: Partial<MemcardUserSettings>): M
       partial.gciPathOverrides !== undefined ? partial.gciPathOverrides : a.gciPathOverrides,
     wiiSyncEnabled: partial.wiiSyncEnabled !== undefined ? partial.wiiSyncEnabled : a.wiiSyncEnabled,
     wiiSyncPort: partial.wiiSyncPort !== undefined ? partial.wiiSyncPort : a.wiiSyncPort,
+    maxReplaysPerCard:
+      partial.maxReplaysPerCard !== undefined ? partial.maxReplaysPerCard : a.maxReplaysPerCard,
+    autoOrganizeGcis:
+      partial.autoOrganizeGcis !== undefined ? partial.autoOrganizeGcis : a.autoOrganizeGcis,
+    mainCharacter: partial.mainCharacter !== undefined ? partial.mainCharacter : a.mainCharacter,
   }
 }
 
@@ -149,6 +163,22 @@ export async function readUserSettings(): Promise<MemcardUserSettings> {
       wiiSyncEnabled:
         typeof parsed.wiiSyncEnabled === 'boolean' ? parsed.wiiSyncEnabled : defaults.wiiSyncEnabled,
       wiiSyncPort: isValidPort(parsed.wiiSyncPort) ? parsed.wiiSyncPort : defaults.wiiSyncPort,
+      maxReplaysPerCard:
+        typeof parsed.maxReplaysPerCard === 'number' &&
+        Number.isInteger(parsed.maxReplaysPerCard) &&
+        parsed.maxReplaysPerCard >= 1 &&
+        parsed.maxReplaysPerCard <= 60
+          ? parsed.maxReplaysPerCard
+          : defaults.maxReplaysPerCard,
+      autoOrganizeGcis:
+        typeof parsed.autoOrganizeGcis === 'boolean' ? parsed.autoOrganizeGcis : defaults.autoOrganizeGcis,
+      mainCharacter:
+        typeof parsed.mainCharacter === 'number' &&
+        Number.isInteger(parsed.mainCharacter) &&
+        parsed.mainCharacter >= 0 &&
+        parsed.mainCharacter <= 25
+          ? parsed.mainCharacter
+          : defaults.mainCharacter,
     })
   } catch {
     return { ...defaults }

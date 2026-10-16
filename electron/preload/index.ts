@@ -65,6 +65,9 @@ contextBridge.exposeInMainWorld('memcard', {
     gciPathOverrides?: Record<string, 'neutral' | 'exclude' | 'include'>
     wiiSyncEnabled?: boolean
     wiiSyncPort?: number
+    maxReplaysPerCard?: number
+    autoOrganizeGcis?: boolean
+    mainCharacter?: number
   }) => ipcRenderer.invoke('memcard:mergeUserSettings', partial),
   pickDirectory: (defaultPath?: string | null) =>
     ipcRenderer.invoke('memcard:pickDirectory', defaultPath),

@@ -3,6 +3,7 @@ import path from 'node:path'
 import { filenameString } from './dentry'
 import { parseGciFile } from './gci'
 import { MemcardImage } from './memcardImage'
+import { decodeTmceExportHeader } from './tmceExportHeader'
 
 export type GciFolderEntry = {
   path: string
@@ -14,6 +15,8 @@ export type GciFolderEntry = {
   blockCount: number
   /** File mtime for newest-first ordering. */
   mtimeMs: number
+  /** TM:CE recording metadata (characters as Melee CKIND ids), when decodable. */
+  tmce?: { hmn: number; cpu: number; name: string } | null
 }
 
 export type GciFolderScanCardStats = {
@@ -99,6 +102,7 @@ export async function scanGciFolderAgainstRaw(
     const saveName = filenameString(dentry)
     const alreadyOnCard = card.isTitlePresent(dentry)
     const blockCount = dentry.readUInt16BE(0x38)
+    const h = decodeTmceExportHeader(buf)
     entries.push({
       path: filePath,
       fileName,
@@ -107,6 +111,7 @@ export async function scanGciFolderAgainstRaw(
       parseError: null,
       blockCount,
       mtimeMs,
+      tmce: h ? { hmn: h.hmn, cpu: h.cpu, name: h.name } : null,
     })
   }
 

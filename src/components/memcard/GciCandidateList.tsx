@@ -16,6 +16,7 @@ import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import type { GciFolderEntry, GciPathOverride } from "@/types/memcard";
 import { formatFolderRelativeTime } from "@/utils/formatFolderRelativeTime";
+import { MatchupIcons } from "./CharacterIcon";
 
 type GciCandidateListProps = {
   candidates: GciFolderEntry[];
@@ -330,7 +331,11 @@ export function GciCandidateList({
                 );
 
                 const main = (
-                  <Box sx={{ minWidth: 0 }}>
+                  <Box sx={{ minWidth: 0, display: "flex", alignItems: "center", gap: 1 }}>
+                    {c.tmce ? (
+                      <MatchupIcons hmn={c.tmce.hmn} cpu={c.tmce.cpu} name={c.tmce.name} />
+                    ) : null}
+                    <Box sx={{ minWidth: 0 }}>
                     <Typography
                       variant="body2"
                       component="span"
@@ -348,6 +353,7 @@ export function GciCandidateList({
                         {c.parseError}
                       </Typography>
                     ) : null}
+                    </Box>
                   </Box>
                 );
 

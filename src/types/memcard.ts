@@ -38,4 +38,7 @@ export type PipelineSettingsState = {
   /** Serve staged .raw files to the Wii TM Sync app over Wi-Fi. */
   wiiSyncEnabled: boolean
   wiiSyncPort: number
+  maxReplaysPerCard: number
+  autoOrganizeGcis: boolean
+  mainCharacter: number
 }

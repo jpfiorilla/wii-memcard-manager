@@ -51,6 +51,9 @@ export function useMemcardWorkspace() {
     notificationsEnabled: true,
     wiiSyncEnabled: true,
     wiiSyncPort: 8642,
+    maxReplaysPerCard: 25,
+    autoOrganizeGcis: true,
+    mainCharacter: 9,
   });
   const [pipelineSettingsOpen, setPipelineSettingsOpen] = useState(false);
   const [settingsHydrated, setSettingsHydrated] = useState(false);
@@ -124,6 +127,9 @@ export function useMemcardWorkspace() {
           notificationsEnabled: s.notificationsEnabled,
           wiiSyncEnabled: s.wiiSyncEnabled,
           wiiSyncPort: s.wiiSyncPort,
+          maxReplaysPerCard: s.maxReplaysPerCard,
+          autoOrganizeGcis: s.autoOrganizeGcis,
+          mainCharacter: s.mainCharacter,
         });
       } finally {
         if (!cancelled) setSettingsHydrated(true);

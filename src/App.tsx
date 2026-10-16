@@ -38,8 +38,6 @@ export default function App() {
         open={w.pipelineSettingsOpen}
         onClose={() => w.setPipelineSettingsOpen(false)}
         pipeline={w.pipeline}
-        setPipeline={w.setPipeline}
-        onPickStagingDir={w.pickStagingDir}
         updatePipeline={w.updatePipeline}
       />
 

@@ -1,7 +1,8 @@
 /*
  * TM Sync — pulls the newest Training Mode memory card (GTME.raw) from Wii Memcard
- * Manager on your Mac, writes it where Slippi Nintendont reads it, then boots
- * Slippi Nintendont straight into Melee.
+ * Manager on your Mac, writes it where Nintendont reads it (saves/<GAME>.raw), then boots
+ * Nintendont straight into the last-played game. Regular Nintendont is preferred: Slippi
+ * Nintendont disables memory card emulation, so it never reads the synced card.
  *
  * Only downloads when the Mac has a different card than the one we last pulled
  * (ETag = CRC32 + size, sent back as If-None-Match). Anything other than a good,
@@ -38,7 +39,14 @@
 #define NIN_MAGIC 0x01070CF6u
 #define NIN_CFG_OFF_CONFIG 8
 #define NIN_CFG_OFF_GAMEPATH 20
-#define NIN_CFG_AUTO_BOOT (1u << 10)
+/* Config bits differ between the two Nintendonts:
+ *   regular Nintendont (FIX94): MEMCARDEMU = bit 3, AUTO_BOOT = bit 7, MC_MULTI = bit 13 (bit 10 is USB!)
+ *   Slippi Nintendont:          AUTO_BOOT = bit 10, memory card emulation disabled entirely
+ * TM:CE saves only work through regular Nintendont's per-game emulated card (saves/GTME.raw). */
+#define NIN_CFG_AUTO_BOOT_SLIPPI  (1u << 10)
+#define NIN_CFG_AUTO_BOOT_REGULAR (1u << 7)
+#define NIN_CFG_MEMCARDEMU_REGULAR (1u << 3)
+#define NIN_CFG_MC_MULTI_REGULAR  (1u << 13)
 
 static void *xfb;
 static GXRModeObj *rmode;
@@ -328,19 +336,29 @@ static void shutdown_for_launch(void)
 	fatUnmount("usb:");
 }
 
+static bool contains_ci(const char *hay, const char *needle)
+{
+	size_t n = strlen(needle);
+	for (; *hay; hay++)
+		if (!strncasecmp(hay, needle, n)) return true;
+	return false;
+}
+
 static void launch_nintendont(const tmsync_config *cfg)
 {
 	static const char *const dols[] = {
+		/* Regular Nintendont first: TM:CE needs its emulated memory card. */
+		"sd:/apps/Nintendont/boot.dol", "sd:/apps/nintendont/boot.dol",
 		"sd:/apps/Slippi Nintendont/boot.dol", "sd:/apps/slippi-nintendont/boot.dol",
 		"sd:/apps/SlippiNintendont/boot.dol", "sd:/apps/slippi/boot.dol",
-		"usb:/apps/Slippi Nintendont/boot.dol", "usb:/apps/slippi-nintendont/boot.dol",
-		"sd:/apps/Nintendont/boot.dol", "sd:/apps/nintendont/boot.dol", NULL,
+		"usb:/apps/Slippi Nintendont/boot.dol", "usb:/apps/slippi-nintendont/boot.dol", NULL,
 	};
-	static const char *const cfgs[] = { "sd:/slippi_nincfg.bin", "usb:/slippi_nincfg.bin", "sd:/nincfg.bin", NULL };
+	static const char *const cfgs_regular[] = { "sd:/nincfg.bin", "usb:/nincfg.bin", NULL };
+	static const char *const cfgs_slippi[] = { "sd:/slippi_nincfg.bin", "usb:/slippi_nincfg.bin", NULL };
 
 	char dol_path[TMSYNC_PATH_MAX], cfg_path[TMSYNC_PATH_MAX];
 	if (!find_first(cfg->nintendont, dols, dol_path, sizeof(dol_path))) {
-		say("Couldn't find Slippi Nintendont's boot.dol.");
+		say("Couldn't find Nintendont's boot.dol.");
 		say("Set nintendont= in config.ini. Returning to the Homebrew Channel...");
 		pause_for(5000);
 		return;
@@ -358,7 +376,8 @@ static void launch_nintendont(const tmsync_config *cfg)
 
 	size_t ncfg_len = 0;
 	uint8_t *ncfg = NULL;
-	if (cfg->autoboot && find_first(cfg->nincfg, cfgs, cfg_path, sizeof(cfg_path))) {
+	bool slippi = contains_ci(dol_path, "slippi");
+	if (cfg->autoboot && find_first(cfg->nincfg, slippi ? cfgs_slippi : cfgs_regular, cfg_path, sizeof(cfg_path))) {
 		ncfg = read_file(cfg_path, &ncfg_len);
 		uint32_t magic = ncfg && ncfg_len > NIN_CFG_OFF_GAMEPATH + 1 ? *(uint32_t *)ncfg : 0;
 		if (magic != NIN_MAGIC || ncfg[NIN_CFG_OFF_GAMEPATH] == '\0') {
@@ -367,7 +386,14 @@ static void launch_nintendont(const tmsync_config *cfg)
 			ncfg = NULL;
 			ncfg_len = 0;
 		} else {
-			*(uint32_t *)(ncfg + NIN_CFG_OFF_CONFIG) |= NIN_CFG_AUTO_BOOT;
+			uint32_t *conf = (uint32_t *)(ncfg + NIN_CFG_OFF_CONFIG);
+			if (slippi) {
+				*conf |= NIN_CFG_AUTO_BOOT_SLIPPI;
+			} else {
+				/* Auto-boot, and make sure the per-game card (saves/<GAME>.raw) is what loads. */
+				*conf |= NIN_CFG_AUTO_BOOT_REGULAR | NIN_CFG_MEMCARDEMU_REGULAR;
+				*conf &= ~NIN_CFG_MC_MULTI_REGULAR;
+			}
 			say("Booting %s", (char *)ncfg + NIN_CFG_OFF_GAMEPATH);
 		}
 	}
@@ -390,7 +416,7 @@ int main(int argc, char **argv)
 	PAD_Init();
 
 	printf("\x1b[2;0H");
-	say("TM Sync %s - Training Mode save sync for Slippi Nintendont", TMSYNC_VERSION);
+	say("TM Sync %s - Training Mode save sync for Nintendont", TMSYNC_VERSION);
 	say("");
 
 	if (!fatInitDefault()) {

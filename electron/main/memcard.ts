@@ -11,7 +11,7 @@ import {
   scanGciFolderAgainstRaw,
   syncFolderSelectionToRaw,
 } from './gcmemcard'
-import { BUILD_GAMES, CARD_SIZE_MB, resolveStagingDir, runGciBatchBuild } from './gciBatchPipeline'
+import { BUILD_GAMES, CARD_SIZE_MB, batchStep, resolveStagingDir, runGciBatchBuild } from './gciBatchPipeline'
 import { captureHeadersFromSavesDir, patchCardFile } from './cardHeaders'
 import { mergeUserSettings, readUserSettings, type MemcardUserSettings } from './userSettings'
 import { peekPendingSdAll, removePendingByLocalPath } from './pendingSdQueue'
@@ -97,6 +97,10 @@ async function runBatchAndNotify(rootDir: string) {
   if (s.gciFolder !== rootDir || !s.autoBuildRaw) return
 
   batchBuildRunning = true
+  const startedAt = Date.now()
+  const watchdog = setInterval(() => {
+    log.warn(`[batch] still running after ${Math.round((Date.now() - startedAt) / 1000)} s; current step: ${batchStep}`)
+  }, 60_000)
   try {
     const r = await runGciBatchBuild(s)
     if (r.ok && r.organized?.length) {
@@ -110,7 +114,10 @@ async function runBatchAndNotify(rootDir: string) {
     broadcast('memcard:batch-built', { outputs: r.outputs, errors: r.errors })
     await processPendingSdOnAllVolumes({ notifyEachCopy: false })
     await notifyAfterBatchPipelineMacos(r.outputs, r.errors)
+  } catch (e) {
+    log.error('[batch] build failed', e)
   } finally {
+    clearInterval(watchdog)
     batchBuildRunning = false
     const hadPending = pendingBatchRoots.size > 0
     pendingBatchRoots.clear()

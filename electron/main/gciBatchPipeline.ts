@@ -53,6 +53,11 @@ type Candidate = {
 const isRecording = (c: Candidate) => c.saveName.startsWith('TMREC')
 
 let lastSummary: string | null = null
+/** What the current build is doing; reported by the watchdog if a build takes too long. */
+export let batchStep = 'idle'
+const step = (s: string) => {
+  batchStep = s
+}
 
 export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBuildOk | { ok: false; error: string }> {
   if (!s.gciFolder || !s.autoBuildRaw) {
@@ -77,6 +82,7 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
   const present: { absPath: string; mtimeMs: number }[] = []
   let anyNew = false
   for (const absPath of gciPaths) {
+    step(`checking ${path.basename(absPath)}`)
     if (s.gciPathOverrides[absPath] === 'exclude') continue
     let st
     try {
@@ -96,7 +102,9 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
 
   // A staged card from an older build at the wrong size must be rebuilt even with nothing new.
   for (const game of BUILD_GAMES) {
+    step(`patching staged ${game}.raw header`)
     await patchCardFile(game, path.join(resolveStagingDir(s), `${game}.raw`))
+    step(`checking staged ${game}.raw build rules`)
     try {
       const meta = JSON.parse(await fs.readFile(path.join(resolveStagingDir(s), `${game}.build.json`), 'utf-8'))
       if (meta.format !== BUILD_FORMAT) throw new Error('old format')
@@ -121,7 +129,9 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
   }
 
   const candidates: Candidate[] = []
+  let readCount = 0
   for (const { absPath, mtimeMs } of present) {
+    step(`reading ${path.basename(absPath)} (${++readCount}/${present.length})`)
     let buf: Buffer
     try {
       buf = await fs.readFile(absPath)
@@ -188,6 +198,7 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
         errors.push(`${gameCode}: ${cardLoad.error}`)
         continue
       }
+      step(`importing ${paths.length} saves into ${gameCode}.raw`)
       const imp = await importGcisIntoMemcardGreedy(cardLoad.card, paths, {
         mTimeGcSeconds: gcSec,
         gciFilenameSanitize: s.gciFilenameSanitize,
@@ -227,11 +238,13 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
 
     if (gameCode === 'GTME' && s.autoOrganizeGcis) {
       const rest = recordings.slice(cap).filter((c) => s.gciPathOverrides[c.absPath] !== 'include')
+      step('organizing older recordings')
       const r = await organizeGciFolder(gciFolder, rest, 0, s.mainCharacter)
       organized.push(...r.moves)
       errors.push(...r.errors)
     }
   }
 
+  step('idle')
   return { ok: true, outputs, errors, organized }
 }

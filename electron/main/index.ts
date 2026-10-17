@@ -1,3 +1,4 @@
+import './threadpool'
 import fs from 'node:fs'
 import { app, BrowserWindow, screen, shell, ipcMain, Tray, Menu } from 'electron'
 import { createRequire } from 'node:module'

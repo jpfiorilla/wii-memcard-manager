@@ -34,7 +34,7 @@
 #include "log.h"
 #include "netio.h"
 
-#define TMSYNC_VERSION "1.1.3"
+#define TMSYNC_VERSION "1.1.4"
 
 /* NIN_CFG fields we touch (see project-slippi/Nintendont common/include/CommonConfig.h). */
 #define NIN_MAGIC 0x01070CF6u
@@ -255,7 +255,12 @@ static sync_outcome do_sync_inner(const tmsync_config *cfg, const char *app_dir)
 	int mac_port = cfg->port;
 	uint64_t disc_deadline = tm_now_ms() + 2500;
 	if (disc_deadline > deadline) disc_deadline = deadline;
-	if (!tm_discover(hint, disc_deadline, &mac_ip, &mac_port)) {
+	bool direct = hint != 0;
+	if (direct) {
+		/* Known address (host= or last time): go straight to HTTP, no UDP needed. */
+		mac_ip = hint;
+		tm_log("discover: skipping broadcast, asking %s:%d directly", cfg->host[0] ? cfg->host : "last known Mac", mac_port);
+	} else if (!tm_discover(0, disc_deadline, &mac_ip, &mac_port)) {
 		/* Mac off / app closed: don't risk a slow TCP connect, just boot. */
 		say("  Mac not found - booting with the save already on the SD card.");
 		say("  (Is Wii Memcard Manager running on the Mac, on the same network?)");
@@ -276,6 +281,19 @@ static sync_outcome do_sync_inner(const tmsync_config *cfg, const char *app_dir)
 	snprintf(url, sizeof(url), "/tmsync/v1/saves/%s.raw", cfg->game);
 	tm_http_result res;
 	bool ok = tm_http_get(mac_ip, mac_port, url, have_local ? last_etag : NULL, deadline, &res, err, sizeof(err));
+	if (!ok && direct) {
+		/* The Mac may have a new address: fall back to searching for it once. */
+		tm_log("sync: direct request failed (%s); searching instead", err);
+		uint64_t d2 = tm_now_ms() + 2500;
+		if (d2 > deadline) d2 = deadline;
+		if (tm_discover(0, d2, &mac_ip, &mac_port)) {
+			g_mac_ip = mac_ip;
+			g_mac_port = mac_port;
+			tm_format_ipv4(mac_ip, ipbuf, sizeof(ipbuf));
+			say("  Mac is now %s:%d", ipbuf, mac_port);
+			ok = tm_http_get(mac_ip, mac_port, url, have_local ? last_etag : NULL, deadline, &res, err, sizeof(err));
+		}
+	}
 	if (!ok) {
 		say("  %s", err);
 		return SYNC_FAILED;

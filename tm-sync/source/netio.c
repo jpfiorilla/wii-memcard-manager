@@ -129,9 +129,9 @@ void tm_format_ipv4(uint32_t ip, char *buf, size_t len)
 static void make_addr(struct sockaddr_in *sa, uint32_t ip, int port)
 {
 	memset(sa, 0, sizeof(*sa));
-	/* libogc rejects addresses whose sin_len doesn't match the length passed in (-22 / EINVAL):
-	 * every sendto in the 1.1.1 log failed this way. */
-	sa->sin_len = sizeof(*sa);
+	/* The Wii's IOS socket layer uses an 8-byte sockaddr (len, family, port, addr) and rejects
+	 * anything else with -22: sendto failed with sin_len 0 (1.1.1) and 16 (1.1.2). */
+	sa->sin_len = 8;
 	sa->sin_family = AF_INET;
 	sa->sin_port = htons((u16)port);
 	sa->sin_addr.s_addr = htonl(ip);
@@ -161,7 +161,8 @@ bool tm_discover(uint32_t hint_ip, uint64_t deadline_ms, uint32_t *out_ip, int *
 
 	struct sockaddr_in any;
 	make_addr(&any, 0, 0);
-	net_bind(sock, (struct sockaddr *)&any, sizeof(any));
+	s32 br = net_bind(sock, (struct sockaddr *)&any, 8);
+	tm_log("discover: bind=%d", (int)br);
 
 	static const char probe[] = "TMSYNC_DISCOVER 1\n";
 	uint32_t local = tm_local_ip();
@@ -178,7 +179,7 @@ bool tm_discover(uint32_t hint_ip, uint64_t deadline_ms, uint32_t *out_ip, int *
 			if (hint_ip && i > 0 && attempt == 0) continue; /* try the configured host alone first */
 			struct sockaddr_in to;
 			make_addr(&to, targets[i], TMSYNC_DISCOVERY_PORT);
-			s32 sr = net_sendto(sock, probe, sizeof(probe) - 1, 0, (struct sockaddr *)&to, sizeof(to));
+			s32 sr = net_sendto(sock, probe, sizeof(probe) - 1, 0, (struct sockaddr *)&to, 8);
 			char tb[20];
 			tm_format_ipv4(targets[i], tb, sizeof(tb));
 			tm_log("discover: attempt %d -> %s:%d sendto=%d", attempt + 1, tb, TMSYNC_DISCOVERY_PORT, (int)sr);

@@ -130,7 +130,7 @@ static void make_addr(struct sockaddr_in *sa, uint32_t ip, int port)
 {
 	memset(sa, 0, sizeof(*sa));
 	/* The Wii's IOS socket layer uses an 8-byte sockaddr (len, family, port, addr) and rejects
-	 * anything else with -22: sendto failed with sin_len 0 (1.1.1) and 16 (1.1.2). */
+	 * anything else with -22: sendto fails with sin_len 0 or 16. */
 	sa->sin_len = 8;
 	sa->sin_family = AF_INET;
 	sa->sin_port = htons((u16)port);

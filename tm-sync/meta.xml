@@ -2,7 +2,7 @@
 <app version="1">
 	<name>TM Sync</name>
 	<coder>John Fio</coder>
-	<version>1.1.4</version>
+	<version>1.0.0</version>
 	<short_description>Sync TM:CE save, then boot Slippi</short_description>
 	<long_description>Pulls the newest GTME.raw from Wii Memcard Manager on your Mac over Wi-Fi (only when it changed), writes it to the SD card, then boots Slippi Nintendont straight into your last game.
 

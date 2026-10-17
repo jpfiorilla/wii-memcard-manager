@@ -34,8 +34,11 @@ type Candidate = {
   gameCode: string
 }
 
+let lastSummary: string | null = null
+
 export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBuildOk | { ok: false; error: string }> {
   if (!s.gciFolder || !s.autoBuildRaw) {
+    console.log(`[batch] skipped: gciFolder=${s.gciFolder ?? 'none'} autoBuildRaw=${s.autoBuildRaw}`)
     return { ok: true, outputs: [], errors: [] }
   }
 
@@ -65,6 +68,12 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
     }
     present.push({ absPath, mtimeMs: st.mtimeMs })
     if (!(await isGciProcessed(absPath, st.mtimeMs))) anyNew = true
+  }
+
+  if (!lastSummary || lastSummary !== `${present.length}:${anyNew}`) {
+    // Logged only when it changes, so the once-a-minute re-check stays quiet.
+    lastSummary = `${present.length}:${anyNew}`
+    console.log(`[batch] ${present.length} recordings at the root of ${gciFolder}; new since last build: ${anyNew}`)
   }
 
   // Nothing new at the root since the last build: leave the staged card alone.
@@ -155,6 +164,7 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
     void marked
     await markGciProcessed(list.map((c) => ({ path: c.absPath, mtimeMs: c.mtimeMs })))
     const destName = `${gameCode}.raw`
+    console.log(`[batch] built ${rawPath}: ${marked.length}/${selected.length} recordings on the card`)
     await enqueuePendingSd({ localPath: rawPath, fileName: destName })
     outputs.push({ path: rawPath, gameCode })
 

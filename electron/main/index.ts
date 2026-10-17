@@ -82,10 +82,11 @@ async function createWindow(startHidden = false) {
   // On macOS closing the window (red dot / ⌘W) just hides it: the app keeps running in the
   // menu bar and leaves the Dock. Only Quit (tray menu or ⌘Q) really exits.
   win.on('close', (e) => {
+    log.info(`[window] close requested (quitting=${isQuitting}, tray=${Boolean(tray)})`)
     if (process.platform !== 'darwin' || isQuitting || !tray) return
     e.preventDefault()
     win?.hide()
-    app.dock?.hide()
+    hideFromDock()
   })
 
   win.once('ready-to-show', () => {
@@ -180,6 +181,18 @@ app.whenReady().then(async () => {
     tray.setContextMenu(buildTrayMenu())
   }
 })
+
+/** Leave the Dock; retried once because macOS sometimes ignores hide() while the app is frontmost. */
+function hideFromDock() {
+  app.dock?.hide()
+  setTimeout(() => {
+    if (app.dock?.isVisible()) {
+      log.warn('[window] Dock icon still visible after hide(); retrying')
+      app.dock.hide()
+    }
+    log.info(`[window] hidden; dock visible=${app.dock?.isVisible()}`)
+  }, 400)
+}
 
 app.on('before-quit', () => {
   isQuitting = true

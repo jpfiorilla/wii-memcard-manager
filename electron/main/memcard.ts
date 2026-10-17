@@ -63,10 +63,17 @@ function debouncedEmitFolder(rootDir: string, payload: MemcardFolderEvent) {
   )
 }
 
+let loggedAutoBatchSkip = false
 function scheduleAutoBatch(rootDir: string) {
   void (async () => {
     const s = await readUserSettings()
-    if (!s.autoBuildRaw || s.gciFolder !== rootDir) return
+    if (!s.autoBuildRaw || s.gciFolder !== rootDir) {
+      if (!loggedAutoBatchSkip) {
+        loggedAutoBatchSkip = true
+        log.warn(`[batch] not building: autoBuildRaw=${s.autoBuildRaw}, watched=${rootDir}, settings folder=${s.gciFolder}`)
+      }
+      return
+    }
     const prev = batchBuildTimers.get(rootDir)
     if (prev) clearTimeout(prev)
     const ms = Math.max(500, s.gciBatchDebounceMs)
@@ -316,6 +323,18 @@ function ensurePeriodicRecheck() {
 
 export async function resumeMemcardSession() {
   const s = await readUserSettings()
+  log.info('[settings]', {
+    gciFolder: s.gciFolder,
+    rawPath: s.rawPath,
+    folderWatchEnabled: s.folderWatchEnabled,
+    autoBuildRaw: s.autoBuildRaw,
+    stagingDir: s.stagingDir,
+    maxReplaysPerCard: s.maxReplaysPerCard,
+    autoOrganizeGcis: s.autoOrganizeGcis,
+    mainCharacter: s.mainCharacter,
+    wiiSyncEnabled: s.wiiSyncEnabled,
+    wiiSyncPort: s.wiiSyncPort,
+  })
   if (s.gciFolder && s.folderWatchEnabled) {
     await startFolderWatch(s.gciFolder)
   }

@@ -38,11 +38,11 @@ function isPlaceholderSerial(h: Buffer): boolean {
   return true
 }
 
-/** A header worth copying: valid checksum, real (console-made) serial. */
+/** A header worth copying: valid checksum and a console-made serial (not ours, not all zeros). */
 export function isRealCardHeader(raw: Buffer): boolean {
   if (raw.length < HEADER_BYTES) return false
   const h = raw.subarray(0, HEADER_BYTES)
-  if (h.every((x) => x === 0xff) || h.every((x) => x === 0)) return false
+  if (h.subarray(0, 12).every((x) => x === 0) || h.subarray(0, 12).every((x) => x === 0xff)) return false
   return headerChecksumOk(h) && !isPlaceholderSerial(h)
 }
 
@@ -55,19 +55,27 @@ export async function loadCardHeader(game: string): Promise<Buffer | null> {
   }
 }
 
-/** Save `raw`'s header as the template for `game` if we don't have one yet. True if newly saved. */
+/**
+ * Save `raw`'s header as the template for `game`. Replaces an existing template only when
+ * `replace` is set (the caller found a newer real card). True if the stored header changed.
+ */
 export async function rememberCardHeader(
   game: string,
   raw: Buffer,
   source: string,
   expectedSizeMb?: number,
+  replace = false,
 ): Promise<boolean> {
   if (!isRealCardHeader(raw)) return false
   if (expectedSizeMb !== undefined && raw.readUInt16BE(SIZE_OFF) !== expectedSizeMb) return false
-  if (await loadCardHeader(game)) return false
+  const existing = await loadCardHeader(game)
+  const next = raw.subarray(0, HEADER_BYTES)
+  if (existing && (!replace || existing.equals(next))) return false
   await fs.mkdir(headerDir(), { recursive: true })
-  await fs.writeFile(path.join(headerDir(), `${game}.bin`), raw.subarray(0, HEADER_BYTES))
-  console.log(`[card-header] saved ${game} header from ${source} (serial ${raw.subarray(0, 12).toString('hex')})`)
+  await fs.writeFile(path.join(headerDir(), `${game}.bin`), next)
+  console.log(
+    `[card-header] ${existing ? 'replaced' : 'saved'} ${game} header from ${source} (serial ${next.subarray(0, 12).toString('hex')})`,
+  )
   return true
 }
 
@@ -97,41 +105,48 @@ export async function patchCardFile(game: string, file: string): Promise<boolean
 }
 
 /**
- * Look at a mounted SD card's saves dir for a real <game>.raw header: the current card first, then
- * the newest backup with a real header. Used whenever a Wii SD card is plugged in.
+ * Look at a mounted SD card's saves dir (the current <game>.raw and backups/) and remember the
+ * header of the most recently written card that has a real, console-made serial. Returns the games
+ * whose stored header changed.
  */
 export async function captureHeadersFromSavesDir(
   savesDir: string,
   games: Iterable<string>,
   expectedSizeMb: number,
 ): Promise<string[]> {
-  const captured: string[] = []
+  const changed: string[] = []
   for (const game of games) {
-    if (await loadCardHeader(game)) continue
-    const candidates: string[] = [path.join(savesDir, `${game}.raw`)]
+    const files: string[] = [path.join(savesDir, `${game}.raw`)]
     try {
-      const backups = (await fs.readdir(path.join(savesDir, 'backups')))
-        .filter((n) => n.startsWith(game) && n.endsWith('.raw') && !n.startsWith('._'))
-        .sort()
-        .reverse()
-      candidates.push(...backups.map((n) => path.join(savesDir, 'backups', n)))
+      for (const n of await fs.readdir(path.join(savesDir, 'backups'))) {
+        if (n.startsWith(game) && n.endsWith('.raw') && !n.startsWith('._')) files.push(path.join(savesDir, 'backups', n))
+      }
     } catch {
       /* no backups dir */
     }
-    for (const file of candidates) {
+    const withTimes: { file: string; mtimeMs: number }[] = []
+    for (const file of files) {
+      try {
+        withTimes.push({ file, mtimeMs: (await fs.stat(file)).mtimeMs })
+      } catch {
+        /* missing */
+      }
+    }
+    withTimes.sort((a, b) => b.mtimeMs - a.mtimeMs)
+    for (const { file } of withTimes) {
       try {
         const fh = await fs.open(file, 'r')
         const buf = Buffer.alloc(HEADER_BYTES)
         await fh.read(buf, 0, HEADER_BYTES, 0)
         await fh.close()
-        if (await rememberCardHeader(game, buf, file, expectedSizeMb)) {
-          captured.push(game)
-          break
-        }
+        if (!isRealCardHeader(buf) || buf.readUInt16BE(SIZE_OFF) !== expectedSizeMb) continue
+        // Newest real card wins; stop at the first one either way.
+        if (await rememberCardHeader(game, buf, file, expectedSizeMb, true)) changed.push(game)
+        break
       } catch {
-        /* missing / unreadable */
+        /* unreadable */
       }
     }
   }
-  return captured
+  return changed
 }

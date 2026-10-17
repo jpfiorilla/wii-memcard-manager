@@ -34,7 +34,7 @@
 #include "log.h"
 #include "netio.h"
 
-#define TMSYNC_VERSION "1.1.0"
+#define TMSYNC_VERSION "1.1.1"
 
 /* NIN_CFG fields we touch (see project-slippi/Nintendont common/include/CommonConfig.h). */
 #define NIN_MAGIC 0x01070CF6u

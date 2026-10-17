@@ -127,7 +127,8 @@ static bool wait_readable(s32 sock, int timeout_ms)
 
 bool tm_discover(uint32_t hint_ip, uint64_t deadline_ms, uint32_t *out_ip, int *out_port)
 {
-	s32 sock = net_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	/* The Wii's IOS network stack rejects IPPROTO_UDP here (-123, protocol not supported); 0 picks UDP. */
+	s32 sock = net_socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
 	if (sock < 0) {
 		tm_log("discover: socket() failed (%d)", (int)sock);
 		return false;

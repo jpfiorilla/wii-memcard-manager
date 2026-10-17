@@ -278,7 +278,23 @@ export async function startFolderWatch(rootDir: string): Promise<{ ok: true } | 
     scheduleAutoBatch(rootDir)
   })
   watchers.set(rootDir, w)
+  // Pick up anything that arrived while the app wasn't running.
+  scheduleAutoBatch(rootDir)
+  ensurePeriodicRecheck()
   return { ok: true }
+}
+
+/**
+ * File events from cloud-synced folders (Google Drive) aren't always delivered, so also re-check
+ * the watched folder every minute. It's a stat-only pass unless something is actually new.
+ */
+const RECHECK_MS = 60_000
+let recheckTimer: ReturnType<typeof setInterval> | null = null
+function ensurePeriodicRecheck() {
+  if (recheckTimer) return
+  recheckTimer = setInterval(() => {
+    for (const rootDir of watchers.keys()) scheduleAutoBatch(rootDir)
+  }, RECHECK_MS)
 }
 
 export async function resumeMemcardSession() {

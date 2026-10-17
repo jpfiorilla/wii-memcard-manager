@@ -52,9 +52,9 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
     .filter((e) => e.isFile() && e.name.toLowerCase().endsWith('.gci'))
     .map((e) => path.join(gciFolder, e.name))
 
-  const candidates: Candidate[] = []
+  // Cheap pass first (stat only) so the periodic re-check doesn't read every file from Drive.
+  const present: { absPath: string; mtimeMs: number }[] = []
   let anyNew = false
-
   for (const absPath of gciPaths) {
     if (s.gciPathOverrides[absPath] === 'exclude') continue
     let st
@@ -63,25 +63,28 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
     } catch {
       continue
     }
-    const mtimeMs = st.mtimeMs
-    if (!(await isGciProcessed(absPath, mtimeMs))) anyNew = true
+    present.push({ absPath, mtimeMs: st.mtimeMs })
+    if (!(await isGciProcessed(absPath, st.mtimeMs))) anyNew = true
+  }
 
+  // Nothing new at the root since the last build: leave the staged card alone.
+  if (present.length === 0 || !anyNew) {
+    return { ok: true, outputs: [], errors: [] }
+  }
+
+  const candidates: Candidate[] = []
+  for (const { absPath, mtimeMs } of present) {
     let buf: Buffer
     try {
       buf = await fs.readFile(absPath)
     } catch {
       continue
     }
-
     const parsed = parseGciFile(buf)
     if (!parsed.ok) continue
-
-    const gameCode = dentryGameCodeString(parsed.value.dentry)
-    candidates.push({ absPath, mtimeMs, gameCode })
+    candidates.push({ absPath, mtimeMs, gameCode: dentryGameCodeString(parsed.value.dentry) })
   }
-
-  // Nothing new at the root since the last build: leave the staged card alone.
-  if (candidates.length === 0 || !anyNew) {
+  if (candidates.length === 0) {
     return { ok: true, outputs: [], errors: [] }
   }
 

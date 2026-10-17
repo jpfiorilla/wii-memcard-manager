@@ -184,6 +184,13 @@ export async function startWiiSyncServer(opts: WiiSyncServerOptions): Promise<Wi
       res.end(entry.buf, () => {
         log(`[tmsync] ${remote} ${fileName} 200 (${entry.buf.length} bytes, etag ${entry.etag})`)
         opts.onRequest?.({ at: Date.now(), remoteAddress: remote, fileName, status: 200 })
+        // Only TM Sync on the Wii counts as "the Wii has it". Other clients (the T-Dongle firmware,
+        // curl) must not cancel the fallback copy to the SD card.
+        const ua = String(req.headers['user-agent'] ?? '')
+        if (!ua.startsWith('tm-sync/')) {
+          log(`[tmsync] ${remote} isn't TM Sync (${ua || 'no user agent'}); not marking ${fileName} delivered`)
+          return
+        }
         opts.onDelivered?.({
           fileName,
           localPath: abs,

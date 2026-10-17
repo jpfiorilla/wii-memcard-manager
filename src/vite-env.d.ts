@@ -95,7 +95,7 @@ export type MemcardApi = {
     rawPath: string
     gciFolder: string
   }) => Promise<
-    | { ok: true; entries: GciFolderEntry[]; cardStats: GciFolderScanCardStats }
+    | { ok: true; entries: GciFolderEntry[]; cardStats: GciFolderScanCardStats | null; cardError?: string }
     | { ok: false; error: string }
   >
   importGcis: (rawPath: string, gciPaths: string[]) => Promise<{ ok: true } | { ok: false; error: string }>

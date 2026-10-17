@@ -39,6 +39,7 @@ export function useMemcardWorkspace() {
   const [cardStats, setCardStats] = useState<CardScanStats | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<string | null>(null);
   const scanDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [pipeline, setPipeline] = useState<PipelineSettingsState>({
@@ -77,10 +78,12 @@ export function useMemcardWorkspace() {
         setCandidates([]);
         setCardStats(null);
         setScanError(r.error);
+        setCardError(null);
         enqueueSnackbar(r.error, { variant: "error" });
         return;
       }
       setScanError(null);
+      setCardError(r.cardError ?? null);
       setCandidates(r.entries);
       setCardStats(r.cardStats);
 
@@ -328,6 +331,7 @@ export function useMemcardWorkspace() {
     cardStats,
     scanning,
     scanError,
+    cardError,
     pipeline,
     setPipeline,
     pipelineSettingsOpen,

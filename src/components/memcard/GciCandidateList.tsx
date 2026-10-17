@@ -25,6 +25,8 @@ type GciCandidateListProps = {
   scanning: boolean;
   /** Last scan failure (unreadable folder or card); shown in place of the list. */
   scanError?: string | null;
+  /** Target .raw couldn't be opened; saves are listed but nothing can be applied. */
+  cardError?: string | null;
   gciFolder: string | null;
   rawPath: string | null;
   onPathOverride: (path: string, o: GciPathOverride) => void;
@@ -36,6 +38,7 @@ export function GciCandidateList({
   pathOverrides,
   scanning,
   scanError,
+  cardError,
   gciFolder,
   rawPath,
   onPathOverride,
@@ -167,11 +170,18 @@ export function GciCandidateList({
 
           {!scanning && scanError && (
             <Typography variant="body2" color="error">
-              Couldn't read the saves: {scanError}
+              {scanError}
               {/not permitted|EPERM|EACCES/i.test(scanError) &&
-                " — macOS is blocking access. Open System Settings → Privacy & Security → Files & Folders (or Full Disk Access) and allow Wii Memcard Manager, then Rescan."}
+                ". macOS is blocking access: allow Wii Memcard Manager in System Settings → Privacy & Security → Files & Folders (or Full Disk Access), then Rescan."}
               {/ENOENT|no such file/i.test(scanError) &&
-                " — that file or folder isn't there right now (unplugged SD card or moved file?). Pick it again with the pencil."}
+                ". Pick the folder again with the purple pencil."}
+            </Typography>
+          )}
+
+          {!scanning && !scanError && cardError && (
+            <Typography variant="body2" color="warning.main">
+              {cardError}. Saves are listed below, but nothing can be applied until the card is back,
+              or point the pink pencil at another GTME.raw.
             </Typography>
           )}
 

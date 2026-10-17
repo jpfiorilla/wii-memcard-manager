@@ -28,28 +28,38 @@ export async function scanGciFolderAgainstRaw(
   rawPath: string,
   gciFolder: string,
 ): Promise<
-  { ok: true; entries: GciFolderEntry[]; cardStats: GciFolderScanCardStats } | { ok: false; error: string }
+  | {
+      ok: true
+      entries: GciFolderEntry[]
+      /** null when the target card couldn't be opened (see cardError). */
+      cardStats: GciFolderScanCardStats | null
+      /** Why the target .raw couldn't be opened; the saves are still listed. */
+      cardError?: string
+    }
+  | { ok: false; error: string }
 > {
-  let rawBuf: Buffer
-  try {
-    rawBuf = await fs.readFile(rawPath)
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    return { ok: false, error: msg }
-  }
-
-  const cardLoad = MemcardImage.load(rawBuf)
-  if (!cardLoad.ok) {
-    return { ok: false, error: cardLoad.error }
-  }
-  const card = cardLoad.card
-
+  // The saves folder is the thing being listed: only its failure fails the scan.
   let dirents
   try {
     dirents = await fs.readdir(gciFolder, { withFileTypes: true })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    return { ok: false, error: msg }
+    return { ok: false, error: `Can't read the saves folder ${gciFolder}: ${msg}` }
+  }
+
+  // A missing/unreadable target card (e.g. SD card unplugged) only disables the on-card comparison.
+  let card: MemcardImage | null = null
+  let cardError: string | undefined
+  try {
+    const cardLoad = MemcardImage.load(await fs.readFile(rawPath))
+    if (cardLoad.ok) card = cardLoad.card
+    else cardError = `Target card ${rawPath} isn't a valid memory card: ${cardLoad.error}`
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException)?.code
+    cardError =
+      code === 'ENOENT'
+        ? `Target card ${rawPath} doesn't exist right now (SD card unplugged?)`
+        : `Can't open target card ${rawPath}: ${e instanceof Error ? e.message : String(e)}`
   }
 
   const gciFiles = dirents
@@ -100,7 +110,7 @@ export async function scanGciFolderAgainstRaw(
 
     const dentry = parsed.value.dentry
     const saveName = filenameString(dentry)
-    const alreadyOnCard = card.isTitlePresent(dentry)
+    const alreadyOnCard = card ? card.isTitlePresent(dentry) : false
     const blockCount = dentry.readUInt16BE(0x38)
     const h = decodeTmceExportHeader(buf)
     entries.push({
@@ -119,10 +129,9 @@ export async function scanGciFolderAgainstRaw(
 
   entries.sort((a, b) => b.mtimeMs - a.mtimeMs)
 
-  const cardStats: GciFolderScanCardStats = {
-    directoryFileCount: card.getDirectoryEntryCount(),
-    freeBlocks: card.getFreeBlockCount(),
-  }
+  const cardStats: GciFolderScanCardStats | null = card
+    ? { directoryFileCount: card.getDirectoryEntryCount(), freeBlocks: card.getFreeBlockCount() }
+    : null
 
-  return { ok: true, entries, cardStats }
+  return { ok: true, entries, cardStats, cardError }
 }

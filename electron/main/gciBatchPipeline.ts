@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { app } from 'electron'
 import { touchFileAccessAndModified, writeFileReplacingBirthtime } from './fileTimes'
-import { dentryGameCodeString } from './gcmemcard/dentry'
+import { dentryGameCodeString, filenameString } from './gcmemcard/dentry'
 import { BLOCK_SIZE, MBIT_TO_BLOCKS, MemCard251Mb } from './gcmemcard/constants'
 
 /**
@@ -14,6 +14,8 @@ export const CARD_SIZE_MB = MemCard251Mb
 const CARD_BYTES = CARD_SIZE_MB * MBIT_TO_BLOCKS * BLOCK_SIZE
 /** Only Training Mode cards are built/served; other games' saves in the folder are ignored. */
 export const BUILD_GAMES = new Set(['GTME'])
+/** Bump when card contents rules change so existing staged cards get rebuilt (2: include game save). */
+const BUILD_FORMAT = 2
 import { formatEmptyCard } from './gcmemcard/format'
 import {
   gcTimestampSecondsFromUnixMs,
@@ -43,7 +45,12 @@ type Candidate = {
   absPath: string
   mtimeMs: number
   gameCode: string
+  /** Card filename from the GCI (e.g. TMREC_... for TM:CE recordings, or the game's own save). */
+  saveName: string
 }
+
+/** TM:CE recordings are named TMREC_*; anything else is the game's own save (settings/progress). */
+const isRecording = (c: Candidate) => c.saveName.startsWith('TMREC')
 
 let lastSummary: string | null = null
 
@@ -91,6 +98,13 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
   for (const game of BUILD_GAMES) {
     await patchCardFile(game, path.join(resolveStagingDir(s), `${game}.raw`))
     try {
+      const meta = JSON.parse(await fs.readFile(path.join(resolveStagingDir(s), `${game}.build.json`), 'utf-8'))
+      if (meta.format !== BUILD_FORMAT) throw new Error('old format')
+    } catch {
+      if (!anyNew) console.log(`[batch] staged ${game}.raw was built by older rules; rebuilding`)
+      anyNew = true
+    }
+    try {
       const st = await fs.stat(path.join(resolveStagingDir(s), `${game}.raw`))
       if (st.size !== CARD_BYTES) {
         console.log(`[batch] staged ${game}.raw is ${st.size} bytes, expected ${CARD_BYTES}; rebuilding`)
@@ -118,7 +132,7 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
     if (!parsed.ok) continue
     const gameCode = dentryGameCodeString(parsed.value.dentry)
     if (!BUILD_GAMES.has(gameCode)) continue
-    candidates.push({ absPath, mtimeMs, gameCode })
+    candidates.push({ absPath, mtimeMs, gameCode, saveName: filenameString(parsed.value.dentry) })
   }
   if (candidates.length === 0) {
     return { ok: true, outputs: [], errors: [] }
@@ -148,7 +162,14 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
   for (const [gameCode, list] of byGame) {
     // Cap the card at a realistic working set instead of filling it: a nearly-full card makes
     // TM:CE complain about free space in-game.
-    const selected = list.slice(0, cap)
+    // The game's own save always goes on (newest copy per filename) and doesn't count toward the
+    // cap; without it TM:CE asks to create save data on every boot.
+    const gameSaves: Candidate[] = []
+    for (const c of list.filter((c) => !isRecording(c))) {
+      if (!gameSaves.some((g) => g.saveName === c.saveName)) gameSaves.push(c)
+    }
+    const recordings = list.filter(isRecording)
+    const selected = [...gameSaves, ...recordings.slice(0, cap)]
     const paths = selected.map((c) => c.absPath)
     const rawPath = path.join(stagingDir, `${gameCode}.raw`)
     let marked: Candidate[] = []
@@ -197,12 +218,15 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
     void marked
     await markGciProcessed(list.map((c) => ({ path: c.absPath, mtimeMs: c.mtimeMs })))
     const destName = `${gameCode}.raw`
-    console.log(`[batch] built ${rawPath}: ${marked.length}/${selected.length} recordings on the card`)
+    console.log(
+      `[batch] built ${rawPath}: ${gameSaves.length} game save(s) + ${marked.length - gameSaves.length}/${selected.length - gameSaves.length} recordings`,
+    )
+    await fs.writeFile(path.join(stagingDir, `${gameCode}.build.json`), JSON.stringify({ format: BUILD_FORMAT }))
     await enqueuePendingSd({ localPath: rawPath, fileName: destName })
     outputs.push({ path: rawPath, gameCode })
 
     if (gameCode === 'GTME' && s.autoOrganizeGcis) {
-      const rest = list.slice(cap).filter((c) => s.gciPathOverrides[c.absPath] !== 'include')
+      const rest = recordings.slice(cap).filter((c) => s.gciPathOverrides[c.absPath] !== 'include')
       const r = await organizeGciFolder(gciFolder, rest, 0, s.mainCharacter)
       organized.push(...r.moves)
       errors.push(...r.errors)

@@ -11,7 +11,8 @@ import {
   scanGciFolderAgainstRaw,
   syncFolderSelectionToRaw,
 } from './gcmemcard'
-import { runGciBatchBuild } from './gciBatchPipeline'
+import { BUILD_GAMES, CARD_SIZE_MB, resolveStagingDir, runGciBatchBuild } from './gciBatchPipeline'
+import { captureHeadersFromSavesDir, patchCardFile } from './cardHeaders'
 import { mergeUserSettings, readUserSettings, type MemcardUserSettings } from './userSettings'
 import { peekPendingSdAll, removePendingByLocalPath } from './pendingSdQueue'
 import { showMemcardNotification } from './notifications'
@@ -178,7 +179,6 @@ async function processSdTransfersForSavesDir(
 async function processPendingSdOnAllVolumes(opts?: { notifyEachCopy?: boolean }) {
   if (process.platform !== 'darwin') return
   const s = await readUserSettings()
-  if (!s.autoCopyToSd) return
   const names = await fs.readdir('/Volumes').catch(() => [])
   for (const name of names) {
     if (name.startsWith('.')) continue
@@ -191,6 +191,12 @@ async function processPendingSdOnAllVolumes(opts?: { notifyEachCopy?: boolean })
       continue
     }
     if (!isPathInsideRoot(mountPath, savesDir)) continue
+    // Learn the Wii card's header (serial) so built cards mount as this console's card.
+    const captured = await captureHeadersFromSavesDir(savesDir, BUILD_GAMES, CARD_SIZE_MB)
+    for (const game of captured) {
+      await patchCardFile(game, path.join(resolveStagingDir(s), `${game}.raw`))
+    }
+    if (!s.autoCopyToSd) continue
     await processSdTransfersForSavesDir(savesDir, s, opts)
   }
 }

@@ -10,10 +10,10 @@ import { BLOCK_SIZE, MBIT_TO_BLOCKS, MemCard251Mb } from './gcmemcard/constants'
  * from its own settings, not the file, and TM:CE hangs (e.g. entering Training Lab) when handed a
  * card of a different size. 25 recordings (~4 blocks each) plus the TM save fit easily.
  */
-const CARD_SIZE_MB = MemCard251Mb
+export const CARD_SIZE_MB = MemCard251Mb
 const CARD_BYTES = CARD_SIZE_MB * MBIT_TO_BLOCKS * BLOCK_SIZE
 /** Only Training Mode cards are built/served; other games' saves in the folder are ignored. */
-const BUILD_GAMES = new Set(['GTME'])
+export const BUILD_GAMES = new Set(['GTME'])
 import { formatEmptyCard } from './gcmemcard/format'
 import {
   gcTimestampSecondsFromUnixMs,
@@ -25,6 +25,7 @@ import { isGciProcessed, markGciProcessed } from './processedGciStore'
 import { enqueuePendingSd } from './pendingSdQueue'
 import type { MemcardUserSettings } from './userSettings'
 import { organizeGciFolder } from './gciOrganizer'
+import { applyCardHeader, loadCardHeader, patchCardFile } from './cardHeaders'
 
 export type BatchBuildOk = {
   ok: true
@@ -88,6 +89,7 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
 
   // A staged card from an older build at the wrong size must be rebuilt even with nothing new.
   for (const game of BUILD_GAMES) {
+    await patchCardFile(game, path.join(resolveStagingDir(s), `${game}.raw`))
     try {
       const st = await fs.stat(path.join(resolveStagingDir(s), `${game}.raw`))
       if (st.size !== CARD_BYTES) {
@@ -154,6 +156,12 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
     try {
       const gcSec = gcTimestampSecondsFromUnixMs(Date.now())
       const rawBuf = formatEmptyCard(CARD_SIZE_MB, gcSec)
+      const header = await loadCardHeader(gameCode)
+      if (applyCardHeader(rawBuf, header)) {
+        console.log(`[batch] ${gameCode}: using the Wii card's header (serial ${header!.subarray(0, 12).toString('hex')})`)
+      } else if (!header) {
+        console.warn(`[batch] ${gameCode}: no Wii card header captured yet - plug the Wii's SD card into the Mac once`)
+      }
       const cardLoad = MemcardImage.load(rawBuf)
       if (!cardLoad.ok) {
         errors.push(`${gameCode}: ${cardLoad.error}`)

@@ -13,7 +13,7 @@ void config_defaults(tmsync_config *c)
 	strcpy(c->saves_dir, "sd:/saves");
 	c->launch = true;
 	c->autoboot = true;
-	c->timeout_s = 5;
+	c->timeout_s = 20;
 	c->keep_backups = 5;
 	c->pause_ms = 800;
 }

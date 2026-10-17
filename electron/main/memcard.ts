@@ -13,6 +13,7 @@ import {
 } from './gcmemcard'
 import { BUILD_GAMES, CARD_SIZE_MB, batchStep, resolveStagingDir, runGciBatchBuild } from './gciBatchPipeline'
 import { captureHeadersFromSavesDir, patchCardFile } from './cardHeaders'
+import { pointTmSyncAtThisMac } from './tmSyncConfig'
 import { mergeUserSettings, readUserSettings, type MemcardUserSettings } from './userSettings'
 import { peekPendingSdAll, removePendingByLocalPath } from './pendingSdQueue'
 import { showMemcardNotification } from './notifications'
@@ -198,6 +199,14 @@ async function processPendingSdOnAllVolumes(opts?: { notifyEachCopy?: boolean })
       continue
     }
     if (!isPathInsideRoot(mountPath, savesDir)) continue
+    // Point TM Sync on this card at this Mac (no IP addresses to type in).
+    if (s.wiiSyncEnabled) {
+      try {
+        await pointTmSyncAtThisMac(mountPath, s.wiiSyncPort)
+      } catch (e) {
+        log.warn('[tm-sync-config] could not update config.ini', e)
+      }
+    }
     // Learn the Wii card's header (serial) so built cards mount as this console's card.
     const captured = await captureHeadersFromSavesDir(savesDir, BUILD_GAMES, CARD_SIZE_MB)
     for (const game of captured) {

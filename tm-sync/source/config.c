@@ -79,7 +79,8 @@ bool config_write_default(const char *path)
 	fputs(
 		"# TM Sync settings. Lines starting with # are comments.\n"
 		"\n"
-		"# The Mac running Wii Memcard Manager. Leave blank to find it automatically.\n"
+		"# The Mac running Wii Memcard Manager. Filled in automatically when this SD card is\n"
+		"# plugged into that Mac; blank = search the network for it.\n"
 		"host=\n"
 		"port=8642\n"
 		"\n"

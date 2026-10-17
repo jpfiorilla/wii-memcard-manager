@@ -47,6 +47,7 @@ if (!app.requestSingleInstanceLock()) {
 
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
+let isQuitting = false
 const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
 
@@ -76,6 +77,15 @@ async function createWindow(startHidden = false) {
   } else {
     win.loadFile(indexHtml)
   }
+
+  // On macOS closing the window (red dot / ⌘W) just hides it: the app keeps running in the
+  // menu bar and leaves the Dock. Only Quit (tray menu or ⌘Q) really exits.
+  win.on('close', (e) => {
+    if (process.platform !== 'darwin' || isQuitting || !tray) return
+    e.preventDefault()
+    win?.hide()
+    app.dock?.hide()
+  })
 
   win.once('ready-to-show', () => {
     win?.maximize()
@@ -166,6 +176,10 @@ app.whenReady().then(async () => {
   }
 })
 
+app.on('before-quit', () => {
+  isQuitting = true
+})
+
 app.on('window-all-closed', () => {
   win = null
   if (process.platform !== 'darwin') {
@@ -189,6 +203,7 @@ app.on('activate', () => {
   }
   const allWindows = BrowserWindow.getAllWindows()
   if (allWindows.length) {
+    allWindows[0].show()
     allWindows[0].focus()
   } else {
     void createWindow()

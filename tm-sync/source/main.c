@@ -31,9 +31,10 @@
 #include "config.h"
 #include "crc32.h"
 #include "dolboot.h"
+#include "log.h"
 #include "netio.h"
 
-#define TMSYNC_VERSION "1.0.0"
+#define TMSYNC_VERSION "1.1.0"
 
 /* NIN_CFG fields we touch (see project-slippi/Nintendont common/include/CommonConfig.h). */
 #define NIN_MAGIC 0x01070CF6u
@@ -67,15 +68,20 @@ static void video_init(void)
 	if (rmode->viTVMode & VI_NON_INTERLACE) VIDEO_WaitVSync();
 }
 
+/* Print a status line on screen and record it in the SD log. */
 static void say(const char *fmt, ...)
 {
+	char line[256];
 	va_list ap;
 	va_start(ap, fmt);
-	vprintf(fmt, ap);
+	vsnprintf(line, sizeof(line), fmt, ap);
 	va_end(ap);
-	printf("\n");
+	printf("%s\n", line);
+	if (line[0]) tm_log("screen: %s", line);
 	VIDEO_WaitVSync();
 }
+
+static const char *outcome_name(int o);
 
 enum { BTN_NONE, BTN_LAUNCH, BTN_EXIT, BTN_SKIP };
 
@@ -192,7 +198,11 @@ static void prune_backups(const char *dir, const char *game, int keep)
 
 typedef enum { SYNC_SKIPPED, SYNC_UP_TO_DATE, SYNC_UPDATED, SYNC_NOTHING_STAGED, SYNC_FAILED } sync_outcome;
 
-static sync_outcome do_sync(const tmsync_config *cfg, const char *app_dir)
+static bool g_net_up;
+static uint32_t g_mac_ip;
+static int g_mac_port;
+
+static sync_outcome do_sync_inner(const tmsync_config *cfg, const char *app_dir)
 {
 	char save_path[TMSYNC_PATH_MAX + 16], tmp_path[TMSYNC_PATH_MAX + 20], etag_path[TMSYNC_PATH_MAX + 16];
 	snprintf(save_path, sizeof(save_path), "%s/%s.raw", cfg->saves_dir, cfg->game);
@@ -205,6 +215,11 @@ static sync_outcome do_sync(const tmsync_config *cfg, const char *app_dir)
 	char last_etag[96] = "";
 	bool have_local = file_exists(save_path);
 	if (have_local) read_line_file(etag_path, last_etag, sizeof(last_etag));
+	{
+		struct stat st;
+		tm_log("sync: card %s exists=%d size=%ld last_etag=%s", save_path, have_local,
+			have_local && stat(save_path, &st) == 0 ? (long)st.st_size : -1L, last_etag[0] ? last_etag : "-");
+	}
 
 	uint64_t deadline = tm_now_ms() + (uint64_t)cfg->timeout_s * 1000;
 	char err[128] = "";
@@ -214,6 +229,7 @@ static sync_outcome do_sync(const tmsync_config *cfg, const char *app_dir)
 		say("  %s", err);
 		return SYNC_FAILED;
 	}
+	g_net_up = true;
 	char ipbuf[20];
 	tm_format_ipv4(tm_local_ip(), ipbuf, sizeof(ipbuf));
 	say("  Wii is %s", ipbuf);
@@ -232,9 +248,11 @@ static sync_outcome do_sync(const tmsync_config *cfg, const char *app_dir)
 	if (!tm_discover(hint, disc_deadline, &mac_ip, &mac_port)) {
 		/* Mac off / app closed: don't risk a slow TCP connect, just boot. */
 		say("  Mac not found - booting with the save already on the SD card.");
-		tm_net_down();
+		say("  (Is Wii Memcard Manager running on the Mac, on the same network?)");
 		return SYNC_FAILED;
 	}
+	g_mac_ip = mac_ip;
+	g_mac_port = mac_port;
 	tm_format_ipv4(mac_ip, ipbuf, sizeof(ipbuf));
 	say("  Mac is %s:%d", ipbuf, mac_port);
 
@@ -242,7 +260,6 @@ static sync_outcome do_sync(const tmsync_config *cfg, const char *app_dir)
 	snprintf(url, sizeof(url), "/tmsync/v1/saves/%s.raw", cfg->game);
 	tm_http_result res;
 	bool ok = tm_http_get(mac_ip, mac_port, url, have_local ? last_etag : NULL, deadline, &res, err, sizeof(err));
-	tm_net_down();
 	if (!ok) {
 		say("  %s", err);
 		return SYNC_FAILED;
@@ -263,6 +280,8 @@ static sync_outcome do_sync(const tmsync_config *cfg, const char *app_dir)
 	}
 
 	uint32_t crc = crc32_buf(res.body, res.body_len);
+	tm_log("sync: got %u bytes, crc %08x (server says %s%08x)", (unsigned)res.body_len, (unsigned)crc,
+		res.has_crc ? "" : "nothing / ", (unsigned)res.crc);
 	if (res.has_crc && crc != res.crc) {
 		say("  Checksum mismatch (got %08x, expected %08x) - not writing.", (unsigned)crc, (unsigned)res.crc);
 		free(res.body);
@@ -286,6 +305,7 @@ static sync_outcome do_sync(const tmsync_config *cfg, const char *app_dir)
 	say("Writing new %s.raw (%u KB)...", cfg->game, (unsigned)(res.body_len / 1024));
 	mkdirs(cfg->saves_dir);
 	if (!write_file(tmp_path, res.body, res.body_len)) {
+		tm_log("sync: write %s failed, errno %d", tmp_path, errno);
 		say("  Couldn't write %s", tmp_path);
 		remove(tmp_path);
 		free(res.body);
@@ -302,8 +322,11 @@ static sync_outcome do_sync(const tmsync_config *cfg, const char *app_dir)
 		snprintf(bpath, sizeof(bpath), "%s/%s-%04d%02d%02d-%02d%02d%02d.raw", bdir, cfg->game,
 			lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec);
 		if (rename(save_path, bpath) == 0) {
+			tm_log("sync: backup %s", bpath);
 			say("  Previous card saved to backups/");
 			prune_backups(bdir, cfg->game, cfg->keep_backups);
+		} else {
+			tm_log("sync: backup rename to %s failed, errno %d", bpath, errno);
 		}
 	}
 	if (file_exists(save_path)) remove(save_path);
@@ -312,8 +335,42 @@ static sync_outcome do_sync(const tmsync_config *cfg, const char *app_dir)
 		return SYNC_FAILED;
 	}
 	write_file(etag_path, res.etag, strlen(res.etag));
+	tm_log("sync: installed new card, etag %s saved to %s", res.etag, etag_path);
 	say("Updated %s", save_path);
 	return SYNC_UPDATED;
+}
+
+static const char *outcome_name(int o)
+{
+	switch (o) {
+	case SYNC_SKIPPED: return "skipped";
+	case SYNC_UP_TO_DATE: return "up to date";
+	case SYNC_UPDATED: return "updated";
+	case SYNC_NOTHING_STAGED: return "nothing staged on the Mac";
+	default: return "failed";
+	}
+}
+
+/* Runs the sync, then (if the Mac was reached) uploads the log tail so it can be read on the Mac. */
+static sync_outcome do_sync(const tmsync_config *cfg, const char *app_dir)
+{
+	g_net_up = false;
+	g_mac_ip = 0;
+	uint64_t t0 = tm_now_ms();
+	sync_outcome o = do_sync_inner(cfg, app_dir);
+	tm_log("sync: outcome = %s (%u ms)", outcome_name(o), (unsigned)(tm_now_ms() - t0));
+	if (g_net_up && g_mac_ip) {
+		size_t n = 0;
+		uint8_t *tail = tm_log_tail(48 * 1024, &n);
+		int status = 0;
+		bool sent = tail && tm_http_post(g_mac_ip, g_mac_port, "/tmsync/v1/log", tail, (uint32_t)n,
+			tm_now_ms() + 3000, &status);
+		tm_log("sync: log upload %s (%u bytes, HTTP %d)", sent ? "ok" : "failed", (unsigned)n, status);
+		free(tail);
+	}
+	if (g_net_up) tm_net_down();
+	if (o == SYNC_FAILED) say("  Details: %s", tm_log_path());
+	return o;
 }
 
 /* ------------------------------------------------------------------ launch */
@@ -357,6 +414,7 @@ static void launch_nintendont(const tmsync_config *cfg)
 	static const char *const cfgs_slippi[] = { "sd:/slippi_nincfg.bin", "usb:/slippi_nincfg.bin", NULL };
 
 	char dol_path[TMSYNC_PATH_MAX], cfg_path[TMSYNC_PATH_MAX];
+	tm_log("launch: nintendont=%s autoboot=%d", cfg->nintendont[0] ? cfg->nintendont : "(auto)", cfg->autoboot);
 	if (!find_first(cfg->nintendont, dols, dol_path, sizeof(dol_path))) {
 		say("Couldn't find Nintendont's boot.dol.");
 		say("Set nintendont= in config.ini. Returning to the Homebrew Channel...");
@@ -367,6 +425,7 @@ static void launch_nintendont(const tmsync_config *cfg)
 	size_t dol_len = 0;
 	uint8_t *dol = read_file(dol_path, &dol_len);
 	char err[96];
+	tm_log("launch: dol %s (%u bytes)", dol_path, (unsigned)dol_len);
 	if (!dol || dol_validate(dol, dol_len, err, sizeof(err)) != 0) {
 		say("Can't launch %s: %s", dol_path, dol ? err : "read failed");
 		free(dol);
@@ -380,6 +439,7 @@ static void launch_nintendont(const tmsync_config *cfg)
 	if (cfg->autoboot && find_first(cfg->nincfg, slippi ? cfgs_slippi : cfgs_regular, cfg_path, sizeof(cfg_path))) {
 		ncfg = read_file(cfg_path, &ncfg_len);
 		uint32_t magic = ncfg && ncfg_len > NIN_CFG_OFF_GAMEPATH + 1 ? *(uint32_t *)ncfg : 0;
+		tm_log("launch: cfg %s (%u bytes) magic %08x slippi=%d", cfg_path, (unsigned)ncfg_len, (unsigned)magic, slippi);
 		if (magic != NIN_MAGIC || ncfg[NIN_CFG_OFF_GAMEPATH] == '\0') {
 			say("%s has no last-played game; opening Nintendont's menu.", cfg_path);
 			free(ncfg);
@@ -394,6 +454,7 @@ static void launch_nintendont(const tmsync_config *cfg)
 				*conf |= NIN_CFG_AUTO_BOOT_REGULAR | NIN_CFG_MEMCARDEMU_REGULAR;
 				*conf &= ~NIN_CFG_MC_MULTI_REGULAR;
 			}
+			tm_log("launch: config bits %08x, game %s", (unsigned)*conf, (char *)ncfg + NIN_CFG_OFF_GAMEPATH);
 			say("Booting %s", (char *)ncfg + NIN_CFG_OFF_GAMEPATH);
 		}
 	}
@@ -433,11 +494,29 @@ int main(int argc, char **argv)
 		if (slash) *slash = '\0';
 	}
 
+	char log_path[TMSYNC_PATH_MAX + 16];
+	snprintf(log_path, sizeof(log_path), "%s/tmsync.log", app_dir);
+	tm_log_open(log_path);
+	{
+		time_t t = time(NULL);
+		struct tm *lt = localtime(&t);
+		tm_log("==== TM Sync %s run %04d-%02d-%02d %02d:%02d:%02d ====", TMSYNC_VERSION,
+			lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec);
+		tm_log("argv0=%s app_dir=%s video=%ux%u", argc > 0 && argv && argv[0] ? argv[0] : "-", app_dir,
+			rmode->fbWidth, rmode->xfbHeight);
+	}
+
 	tmsync_config cfg;
 	config_defaults(&cfg);
 	char cfg_path[TMSYNC_PATH_MAX + 16];
 	snprintf(cfg_path, sizeof(cfg_path), "%s/config.ini", app_dir);
-	if (!config_load(cfg_path, &cfg)) config_write_default(cfg_path);
+	bool had_cfg = config_load(cfg_path, &cfg);
+	if (!had_cfg) config_write_default(cfg_path);
+	tm_log("config (%s%s): host=%s port=%d game=%s saves_dir=%s nintendont=%s nincfg=%s launch=%d autoboot=%d "
+		"timeout=%ds keep_backups=%d pause_ms=%d", cfg_path, had_cfg ? "" : ", defaults written",
+		cfg.host[0] ? cfg.host : "(discover)", cfg.port, cfg.game, cfg.saves_dir,
+		cfg.nintendont[0] ? cfg.nintendont : "(auto)", cfg.nincfg[0] ? cfg.nincfg : "(auto)",
+		cfg.launch, cfg.autoboot, cfg.timeout_s, cfg.keep_backups, cfg.pause_ms);
 
 	bool skip = poll_buttons() == BTN_SKIP;
 	sync_outcome r = skip ? SYNC_SKIPPED : do_sync(&cfg, app_dir);
@@ -455,7 +534,10 @@ int main(int argc, char **argv)
 	/* Failures never cost extra time: anything but a good new card just boots as normal. */
 	(void)r;
 	int b = pause_for(cfg.pause_ms);
-	if (b == BTN_EXIT) return 0;
+	if (b == BTN_EXIT) {
+		tm_log("exit to Homebrew Channel (button)");
+		return 0;
+	}
 
 	launch_nintendont(&cfg);
 	return 0;

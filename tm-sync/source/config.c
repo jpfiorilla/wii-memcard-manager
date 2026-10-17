@@ -87,14 +87,14 @@ bool config_write_default(const char *path)
 		"game=GTME\n"
 		"saves_dir=sd:/saves\n"
 		"\n"
-		"# After syncing, start Slippi Nintendont. Blank paths = auto-detect.\n"
+		"# After syncing, start Nintendont (regular, not Slippi). Blank paths = auto-detect.\n"
 		"launch=1\n"
 		"autoboot=1\n"
 		"nintendont=\n"
 		"nincfg=\n"
 		"\n"
 		"# Seconds to spend on Wi-Fi + download before giving up and booting normally.\n"
-		"timeout=5\n"
+		"timeout=20\n"
 		"keep_backups=5\n"
 		"pause_ms=800\n",
 		f);

@@ -3,6 +3,8 @@
  * and tie deliveries back into the pending-SD queue.
  */
 import path from 'node:path'
+import fs from 'node:fs/promises'
+import { app } from 'electron'
 import { resolveStagingDir } from './gciBatchPipeline'
 import { removePendingByLocalPath } from './pendingSdQueue'
 import { readUserSettings } from './userSettings'
@@ -62,6 +64,12 @@ async function doReconfigure(broadcast: Broadcast) {
         // The Wii now has this image; no need to also copy it on the next SD mount.
         void removePendingByLocalPath(d.localPath)
         broadcast('memcard:wii-sync-delivered', d)
+      },
+      onWiiLog: async (text, remote) => {
+        // The Wii sends the tail of sd:/apps/tm-sync/tmsync.log after each run that reaches the Mac.
+        const file = path.join(app.getPath('logs'), 'wii-tmsync.log')
+        await fs.writeFile(file, text, 'latin1')
+        console.log(`[tmsync] saved the Wii's log from ${remote} (${text.length} bytes) to ${file}`)
       },
       log: (m) => console.log(m),
     })

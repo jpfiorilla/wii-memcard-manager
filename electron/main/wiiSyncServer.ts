@@ -86,6 +86,8 @@ export type WiiSyncServerOptions = {
   /** Called after a full 200 body has been written to the Wii. */
   onDelivered?: (d: WiiSyncDelivery) => void
   onRequest?: (r: WiiSyncRequestLog) => void
+  /** Called with the Wii's own TM Sync log when it uploads one (POST /tmsync/v1/log). */
+  onWiiLog?: (text: string, remoteAddress: string | undefined) => void | Promise<void>
   log?: (msg: string) => void
 }
 
@@ -126,9 +128,23 @@ export async function startWiiSyncServer(opts: WiiSyncServerOptions): Promise<Wi
       const send = (status: number, body: string, fileName = '') => {
         res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8', Connection: 'close' })
         res.end(req.method === 'HEAD' ? undefined : body)
+        log(`[tmsync] ${remote} ${req.method} ${url} -> ${status}${status >= 400 ? ` (${body.trim()})` : ''}`)
         if (fileName) opts.onRequest?.({ at: Date.now(), remoteAddress: remote, fileName, status })
       }
+      log(`[tmsync] ${remote} ${req.method} ${url} if-none-match=${req.headers['if-none-match'] ?? '-'} ua=${req.headers['user-agent'] ?? '-'}`)
 
+      if (req.method === 'POST' && url === '/tmsync/v1/log') {
+        const chunks: Buffer[] = []
+        let size = 0
+        for await (const c of req) {
+          size += (c as Buffer).length
+          if (size > 512 * 1024) return send(413, 'log too large\n')
+          chunks.push(c as Buffer)
+        }
+        const text = Buffer.concat(chunks).toString('latin1')
+        await opts.onWiiLog?.(text, remote)
+        return send(200, 'ok\n')
+      }
       if (req.method !== 'GET' && req.method !== 'HEAD') return send(405, 'method not allowed\n')
       if (url === '/tmsync/v1/ping') return send(200, 'tmsync 1\n')
 

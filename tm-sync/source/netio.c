@@ -1,4 +1,5 @@
 #include "netio.h"
+#include "log.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -45,24 +46,38 @@ bool tm_net_up(uint64_t deadline_ms, char *err, size_t errlen)
 {
 	s_init_done = 0;
 	s_init_result = -1;
+	uint64_t t0 = tm_now_ms();
+	tm_log("net: net_init_async (budget %d ms)", remaining_ms(deadline_ms));
 	s32 r = net_init_async(init_cb, NULL);
 	if (r < 0) {
+		tm_log("net: net_init_async returned %d", (int)r);
 		snprintf(err, errlen, "network init failed (%d)", (int)r);
 		return false;
 	}
+	uint64_t next_tick = t0 + 2000;
 	while (!s_init_done) {
 		if (remaining_ms(deadline_ms) == 0) {
+			tm_log("net: still not up after %u ms - giving up", (unsigned)(tm_now_ms() - t0));
 			net_deinit(); /* aborts the pending async init */
-			snprintf(err, errlen, "Wi-Fi didn't come up in time");
+			snprintf(err, errlen, "Wi-Fi didn't come up in %u s (raise timeout= in config.ini)",
+				(unsigned)((tm_now_ms() - t0 + 500) / 1000));
 			return false;
+		}
+		if (tm_now_ms() >= next_tick) {
+			tm_log("net: waiting... %u ms", (unsigned)(tm_now_ms() - t0));
+			next_tick += 2000;
 		}
 		usleep(20 * 1000);
 	}
+	tm_log("net: init finished in %u ms, result %d", (unsigned)(tm_now_ms() - t0), (int)s_init_result);
 	if (s_init_result < 0) {
 		snprintf(err, errlen, "Wi-Fi connect failed (%d) - check the Wii's Internet settings", (int)s_init_result);
 		net_deinit();
 		return false;
 	}
+	char ip[20];
+	tm_format_ipv4(tm_local_ip(), ip, sizeof(ip));
+	tm_log("net: local ip %s", ip);
 	return true;
 }
 
@@ -113,7 +128,11 @@ static bool wait_readable(s32 sock, int timeout_ms)
 bool tm_discover(uint32_t hint_ip, uint64_t deadline_ms, uint32_t *out_ip, int *out_port)
 {
 	s32 sock = net_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	if (sock < 0) return false;
+	if (sock < 0) {
+		tm_log("discover: socket() failed (%d)", (int)sock);
+		return false;
+	}
+	uint64_t t0 = tm_now_ms();
 
 	u32 yes = 1;
 	net_setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &yes, sizeof(yes)); /* best effort */
@@ -137,7 +156,10 @@ bool tm_discover(uint32_t hint_ip, uint64_t deadline_ms, uint32_t *out_ip, int *
 			if (hint_ip && i > 0 && attempt == 0) continue; /* try the configured host alone first */
 			struct sockaddr_in to;
 			make_addr(&to, targets[i], TMSYNC_DISCOVERY_PORT);
-			net_sendto(sock, probe, sizeof(probe) - 1, 0, (struct sockaddr *)&to, sizeof(to));
+			s32 sr = net_sendto(sock, probe, sizeof(probe) - 1, 0, (struct sockaddr *)&to, sizeof(to));
+			char tb[20];
+			tm_format_ipv4(targets[i], tb, sizeof(tb));
+			tm_log("discover: attempt %d -> %s:%d sendto=%d", attempt + 1, tb, TMSYNC_DISCOVERY_PORT, (int)sr);
 		}
 		attempt++;
 
@@ -151,6 +173,9 @@ bool tm_discover(uint32_t hint_ip, uint64_t deadline_ms, uint32_t *out_ip, int *
 			s32 got = net_recvfrom(sock, buf, sizeof(buf) - 1, 0, (struct sockaddr *)&from, &fl);
 			if (got <= 0) continue;
 			buf[got] = '\0';
+			char fb[20];
+			tm_format_ipv4(ntohl(from.sin_addr.s_addr), fb, sizeof(fb));
+			tm_log("discover: reply from %s: \"%.40s\"", fb, buf);
 			int ver = 0, port = 0;
 			if (sscanf(buf, "TMSYNC_HERE %d %d", &ver, &port) == 2 && port > 0 && port < 65536) {
 				*out_ip = ntohl(from.sin_addr.s_addr);
@@ -161,6 +186,8 @@ bool tm_discover(uint32_t hint_ip, uint64_t deadline_ms, uint32_t *out_ip, int *
 		}
 	}
 	net_close(sock);
+	tm_log("discover: %s after %d attempt(s), %u ms", found ? "found the Mac" : "no reply",
+		attempt, (unsigned)(tm_now_ms() - t0));
 	return found;
 }
 
@@ -190,6 +217,9 @@ bool tm_http_get(uint32_t ip, int port, const char *path, const char *if_none_ma
                  uint64_t deadline_ms, tm_http_result *out, char *err, size_t errlen)
 {
 	memset(out, 0, sizeof(*out));
+	uint64_t t0 = tm_now_ms();
+	tm_log("http: GET %s (If-None-Match: %s, budget %d ms)", path,
+		if_none_match && *if_none_match ? if_none_match : "-", remaining_ms(deadline_ms));
 
 	s32 sock = net_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
 	if (sock < 0) {
@@ -199,6 +229,7 @@ bool tm_http_get(uint32_t ip, int port, const char *path, const char *if_none_ma
 	struct sockaddr_in sa;
 	make_addr(&sa, ip, port);
 	s32 r = net_connect(sock, (struct sockaddr *)&sa, sizeof(sa));
+	tm_log("http: connect=%d after %u ms", (int)r, (unsigned)(tm_now_ms() - t0));
 	if (r < 0) {
 		snprintf(err, errlen, "couldn't connect to the Mac (%d)", (int)r);
 		net_close(sock);
@@ -278,6 +309,8 @@ bool tm_http_get(uint32_t ip, int port, const char *path, const char *if_none_ma
 		if (header_end && content_length >= 0 && len >= header_end + (uint32_t)content_length) break;
 	}
 	net_close(sock);
+	tm_log("http: received %u bytes in %u ms (ok=%d%s%s)", len, (unsigned)(tm_now_ms() - t0), ok,
+		ok ? "" : ", ", ok ? "" : err);
 
 	if (ok && !header_end) { snprintf(err, errlen, "bad HTTP response"); ok = false; }
 	if (!ok) { free(buf); return false; }
@@ -291,6 +324,8 @@ bool tm_http_get(uint32_t ip, int port, const char *path, const char *if_none_ma
 	}
 	out->status = status;
 	find_header((char *)buf, "ETag", out->etag, sizeof(out->etag));
+	tm_log("http: status %d, content-length %lld, etag %s", status, (long long)content_length,
+		out->etag[0] ? out->etag : "-");
 	char crc[16];
 	if (find_header((char *)buf, "X-TMSync-CRC32", crc, sizeof(crc))) {
 		out->crc = (uint32_t)strtoul(crc, NULL, 16);
@@ -314,4 +349,46 @@ bool tm_http_get(uint32_t ip, int port, const char *path, const char *if_none_ma
 	}
 	free(buf);
 	return true;
+}
+
+bool tm_http_post(uint32_t ip, int port, const char *path, const uint8_t *body, uint32_t body_len,
+                  uint64_t deadline_ms, int *out_status)
+{
+	*out_status = 0;
+	s32 sock = net_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+	if (sock < 0) return false;
+	struct sockaddr_in sa;
+	make_addr(&sa, ip, port);
+	if (net_connect(sock, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+		net_close(sock);
+		return false;
+	}
+	char ipbuf[20], hdr[256];
+	tm_format_ipv4(ip, ipbuf, sizeof(ipbuf));
+	int hl = snprintf(hdr, sizeof(hdr),
+		"POST %s HTTP/1.0\r\nHost: %s:%d\r\nUser-Agent: tm-sync/1\r\n"
+		"Content-Type: text/plain\r\nContent-Length: %u\r\nConnection: close\r\n\r\n",
+		path, ipbuf, port, (unsigned)body_len);
+	const uint8_t *parts[2] = { (const uint8_t *)hdr, body };
+	uint32_t lens[2] = { (uint32_t)hl, body_len };
+	for (int p = 0; p < 2; p++) {
+		for (uint32_t sent = 0; sent < lens[p];) {
+			if (remaining_ms(deadline_ms) == 0) { net_close(sock); return false; }
+			uint32_t chunk = lens[p] - sent > 8192 ? 8192 : lens[p] - sent;
+			s32 w = net_send(sock, parts[p] + sent, chunk, 0);
+			if (w <= 0) { net_close(sock); return false; }
+			sent += (uint32_t)w;
+		}
+	}
+	char resp[64] = "";
+	if (wait_readable(sock, remaining_ms(deadline_ms))) {
+		s32 got = net_recv(sock, resp, sizeof(resp) - 1, 0);
+		if (got > 0) {
+			resp[got] = '\0';
+			int a, b;
+			sscanf(resp, "HTTP/%d.%d %d", &a, &b, out_status);
+		}
+	}
+	net_close(sock);
+	return *out_status == 200;
 }

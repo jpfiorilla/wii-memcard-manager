@@ -32,4 +32,8 @@ bool tm_discover(uint32_t hint_ip, uint64_t deadline_ms, uint32_t *out_ip, int *
 bool tm_http_get(uint32_t ip, int port, const char *path, const char *if_none_match,
                  uint64_t deadline_ms, tm_http_result *out, char *err, size_t errlen);
 
+/* Small HTTP/1.0 POST (used to upload TM Sync's log to the Mac). True on HTTP 200. */
+bool tm_http_post(uint32_t ip, int port, const char *path, const uint8_t *body, uint32_t body_len,
+                  uint64_t deadline_ms, int *out_status);
+
 #endif

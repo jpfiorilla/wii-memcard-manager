@@ -3,7 +3,17 @@ import path from 'node:path'
 import { app } from 'electron'
 import { touchFileAccessAndModified, writeFileReplacingBirthtime } from './fileTimes'
 import { dentryGameCodeString } from './gcmemcard/dentry'
-import { MemCard2043Mb } from './gcmemcard/constants'
+import { BLOCK_SIZE, MBIT_TO_BLOCKS, MemCard251Mb } from './gcmemcard/constants'
+
+/**
+ * Build cards at Nintendont's default 251-block (2 MiB) size. Nintendont sizes its emulated card
+ * from its own settings, not the file, and TM:CE hangs (e.g. entering Training Lab) when handed a
+ * card of a different size. 25 recordings (~4 blocks each) plus the TM save fit easily.
+ */
+const CARD_SIZE_MB = MemCard251Mb
+const CARD_BYTES = CARD_SIZE_MB * MBIT_TO_BLOCKS * BLOCK_SIZE
+/** Only Training Mode cards are built/served; other games' saves in the folder are ignored. */
+const BUILD_GAMES = new Set(['GTME'])
 import { formatEmptyCard } from './gcmemcard/format'
 import {
   gcTimestampSecondsFromUnixMs,
@@ -76,6 +86,19 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
     console.log(`[batch] ${present.length} recordings at the root of ${gciFolder}; new since last build: ${anyNew}`)
   }
 
+  // A staged card from an older build at the wrong size must be rebuilt even with nothing new.
+  for (const game of BUILD_GAMES) {
+    try {
+      const st = await fs.stat(path.join(resolveStagingDir(s), `${game}.raw`))
+      if (st.size !== CARD_BYTES) {
+        console.log(`[batch] staged ${game}.raw is ${st.size} bytes, expected ${CARD_BYTES}; rebuilding`)
+        anyNew = true
+      }
+    } catch {
+      /* not built yet */
+    }
+  }
+
   // Nothing new at the root since the last build: leave the staged card alone.
   if (present.length === 0 || !anyNew) {
     return { ok: true, outputs: [], errors: [] }
@@ -91,7 +114,9 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
     }
     const parsed = parseGciFile(buf)
     if (!parsed.ok) continue
-    candidates.push({ absPath, mtimeMs, gameCode: dentryGameCodeString(parsed.value.dentry) })
+    const gameCode = dentryGameCodeString(parsed.value.dentry)
+    if (!BUILD_GAMES.has(gameCode)) continue
+    candidates.push({ absPath, mtimeMs, gameCode })
   }
   if (candidates.length === 0) {
     return { ok: true, outputs: [], errors: [] }
@@ -128,7 +153,7 @@ export async function runGciBatchBuild(s: MemcardUserSettings): Promise<BatchBui
 
     try {
       const gcSec = gcTimestampSecondsFromUnixMs(Date.now())
-      const rawBuf = formatEmptyCard(MemCard2043Mb, gcSec)
+      const rawBuf = formatEmptyCard(CARD_SIZE_MB, gcSec)
       const cardLoad = MemcardImage.load(rawBuf)
       if (!cardLoad.ok) {
         errors.push(`${gameCode}: ${cardLoad.error}`)

@@ -13,7 +13,7 @@ void config_defaults(tmsync_config *c)
 	strcpy(c->saves_dir, "sd:/saves");
 	c->launch = true;
 	c->autoboot = true;
-	c->timeout_s = 20;
+	c->timeout_s = 40;
 	c->keep_backups = 5;
 	c->pause_ms = 800;
 }
@@ -94,7 +94,7 @@ bool config_write_default(const char *path)
 		"nincfg=\n"
 		"\n"
 		"# Seconds to spend on Wi-Fi + download before giving up and booting normally.\n"
-		"timeout=20\n"
+		"timeout=40\n"
 		"keep_backups=5\n"
 		"pause_ms=800\n",
 		f);

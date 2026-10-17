@@ -42,26 +42,24 @@ static s32 init_cb(s32 result, void *usr)
 	return 0;
 }
 
-bool tm_net_up(uint64_t deadline_ms, char *err, size_t errlen)
+/* One net_init_async attempt; 0 = up, <0 = IOS error, 1 = ran out of time (already deinit'd). */
+static int net_up_once(uint64_t deadline_ms, int attempt)
 {
 	s_init_done = 0;
 	s_init_result = -1;
 	uint64_t t0 = tm_now_ms();
-	tm_log("net: net_init_async (budget %d ms)", remaining_ms(deadline_ms));
+	tm_log("net: attempt %d: net_init_async (budget %d ms)", attempt, remaining_ms(deadline_ms));
 	s32 r = net_init_async(init_cb, NULL);
 	if (r < 0) {
 		tm_log("net: net_init_async returned %d", (int)r);
-		snprintf(err, errlen, "network init failed (%d)", (int)r);
-		return false;
+		return (int)r;
 	}
 	uint64_t next_tick = t0 + 2000;
 	while (!s_init_done) {
 		if (remaining_ms(deadline_ms) == 0) {
 			tm_log("net: still not up after %u ms - giving up", (unsigned)(tm_now_ms() - t0));
 			net_deinit(); /* aborts the pending async init */
-			snprintf(err, errlen, "Wi-Fi didn't come up in %u s (raise timeout= in config.ini)",
-				(unsigned)((tm_now_ms() - t0 + 500) / 1000));
-			return false;
+			return 1;
 		}
 		if (tm_now_ms() >= next_tick) {
 			tm_log("net: waiting... %u ms", (unsigned)(tm_now_ms() - t0));
@@ -69,16 +67,36 @@ bool tm_net_up(uint64_t deadline_ms, char *err, size_t errlen)
 		}
 		usleep(20 * 1000);
 	}
-	tm_log("net: init finished in %u ms, result %d", (unsigned)(tm_now_ms() - t0), (int)s_init_result);
-	if (s_init_result < 0) {
-		snprintf(err, errlen, "Wi-Fi connect failed (%d) - check the Wii's Internet settings", (int)s_init_result);
+	tm_log("net: attempt %d finished in %u ms, result %d", attempt, (unsigned)(tm_now_ms() - t0), (int)s_init_result);
+	return s_init_result < 0 ? (int)s_init_result : 0;
+}
+
+bool tm_net_up(uint64_t deadline_ms, char *err, size_t errlen)
+{
+	/* The Wii's Wi-Fi bring-up is flaky: most runs connect in ~7 s, but some fail with -116
+	 * (timed out) after ~20 s. A second try usually works, so keep retrying while time remains. */
+	uint64_t t0 = tm_now_ms();
+	int last = 0;
+	for (int attempt = 1; attempt <= 4; attempt++) {
+		last = net_up_once(deadline_ms, attempt);
+		if (last == 0) {
+			char ip[20];
+			tm_format_ipv4(tm_local_ip(), ip, sizeof(ip));
+			tm_log("net: up after %u ms (attempt %d), local ip %s", (unsigned)(tm_now_ms() - t0), attempt, ip);
+			return true;
+		}
+		if (last == 1) break; /* out of time */
 		net_deinit();
-		return false;
+		if (remaining_ms(deadline_ms) < 5000) break;
+		tm_log("net: retrying in 1 s");
+		usleep(1000 * 1000);
 	}
-	char ip[20];
-	tm_format_ipv4(tm_local_ip(), ip, sizeof(ip));
-	tm_log("net: local ip %s", ip);
-	return true;
+	if (last == 1)
+		snprintf(err, errlen, "Wi-Fi didn't come up in %u s (raise timeout= in config.ini)",
+			(unsigned)((tm_now_ms() - t0 + 500) / 1000));
+	else
+		snprintf(err, errlen, "Wi-Fi connect failed (%d) - check the Wii's Internet settings", last);
+	return false;
 }
 
 void tm_net_down(void)

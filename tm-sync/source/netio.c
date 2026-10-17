@@ -111,6 +111,9 @@ void tm_format_ipv4(uint32_t ip, char *buf, size_t len)
 static void make_addr(struct sockaddr_in *sa, uint32_t ip, int port)
 {
 	memset(sa, 0, sizeof(*sa));
+	/* libogc rejects addresses whose sin_len doesn't match the length passed in (-22 / EINVAL):
+	 * every sendto in the 1.1.1 log failed this way. */
+	sa->sin_len = sizeof(*sa);
 	sa->sin_family = AF_INET;
 	sa->sin_port = htons((u16)port);
 	sa->sin_addr.s_addr = htonl(ip);

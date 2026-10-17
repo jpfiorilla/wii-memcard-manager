@@ -34,7 +34,7 @@
 #include "log.h"
 #include "netio.h"
 
-#define TMSYNC_VERSION "1.1.1"
+#define TMSYNC_VERSION "1.1.2"
 
 /* NIN_CFG fields we touch (see project-slippi/Nintendont common/include/CommonConfig.h). */
 #define NIN_MAGIC 0x01070CF6u
@@ -239,7 +239,17 @@ static sync_outcome do_sync_inner(const tmsync_config *cfg, const char *app_dir)
 		say("  host=%s isn't an IPv4 address; searching instead", cfg->host);
 		hint = 0;
 	}
-	if (hint) say("Contacting %s...", cfg->host);
+	char last_mac_path[TMSYNC_PATH_MAX + 16];
+	snprintf(last_mac_path, sizeof(last_mac_path), "%s/last_mac.txt", app_dir);
+	if (!hint) {
+		char last[40] = "";
+		read_line_file(last_mac_path, last, sizeof(last));
+		char *sp = strchr(last, ' ');
+		if (sp) *sp = '\0';
+		if (last[0] && tm_parse_ipv4(last, &hint)) tm_log("discover: trying last known Mac %s first", last);
+		else hint = 0;
+	}
+	if (cfg->host[0] && hint) say("Contacting %s...", cfg->host);
 	else say("Looking for Wii Memcard Manager on your network...");
 	uint32_t mac_ip = 0;
 	int mac_port = cfg->port;
@@ -254,6 +264,12 @@ static sync_outcome do_sync_inner(const tmsync_config *cfg, const char *app_dir)
 	g_mac_ip = mac_ip;
 	g_mac_port = mac_port;
 	tm_format_ipv4(mac_ip, ipbuf, sizeof(ipbuf));
+	{
+		/* Remember the Mac so the next run can ask it directly first (in case broadcasts get dropped). */
+		char line[40];
+		int n = snprintf(line, sizeof(line), "%s %d\n", ipbuf, mac_port);
+		write_file(last_mac_path, line, (size_t)n);
+	}
 	say("  Mac is %s:%d", ipbuf, mac_port);
 
 	char url[64];

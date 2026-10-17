@@ -8,12 +8,19 @@ Early scaffold: folder watching (Drive / export folders), pick target `.raw`, **
 
 Agent-oriented cheat sheet (always-on Cursor rule): [`.cursor/rules/wii-memcard-manager-brief.mdc`](.cursor/rules/wii-memcard-manager-brief.mdc).
 
+## How it fits together
+
+![Data flow: Google Drive → Wii Memcard Manager → TM Sync / T-Dongle → Nintendont](docs/data-flow.svg)
+
 ## Wii TM Sync (Wi-Fi)
 
 The app runs a small LAN server (HTTP `8642`, UDP discovery `8643`) that serves the newest staged
-`<GAME>.raw`. The companion Homebrew Channel app in [`tm-sync/`](tm-sync/README.md) pulls it right before
-booting Slippi Nintendont, only when its checksum changed, and boots normally on any failure.
-Toggle it under Settings → Wii TM Sync.
+`GTME.raw` (251 blocks, newest 25 recordings). The companion Homebrew Channel app in
+[`tm-sync/`](tm-sync/README.md) pulls it right before booting regular Nintendont (Slippi Nintendont
+has no memory card emulation), only when its checksum changed, and boots normally on any failure.
+The experimental [LilyGO T-Dongle firmware](https://github.com/jpfiorilla/tm-ce-dongle) speaks the
+same protocol. Logs: `~/Library/Logs/Wii Memcard Manager/manager.log` (Mac) and `wii-tmsync.log`
+(uploaded by TM Sync after each run).
 
 ## Develop
 

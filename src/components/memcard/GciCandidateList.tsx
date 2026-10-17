@@ -23,6 +23,8 @@ type GciCandidateListProps = {
   selectedPaths: Set<string>;
   pathOverrides: Record<string, GciPathOverride>;
   scanning: boolean;
+  /** Last scan failure (unreadable folder or card); shown in place of the list. */
+  scanError?: string | null;
   gciFolder: string | null;
   rawPath: string | null;
   onPathOverride: (path: string, o: GciPathOverride) => void;
@@ -33,6 +35,7 @@ export function GciCandidateList({
   selectedPaths,
   pathOverrides,
   scanning,
+  scanError,
   gciFolder,
   rawPath,
   onPathOverride,
@@ -162,7 +165,17 @@ export function GciCandidateList({
             picks. The check column shows the resulting plan (read-only).
           </Typography>
 
-          {!scanning && gciFolder && rawPath && candidates.length === 0 && (
+          {!scanning && scanError && (
+            <Typography variant="body2" color="error">
+              Couldn't read the saves: {scanError}
+              {/not permitted|EPERM|EACCES/i.test(scanError) &&
+                " — macOS is blocking access. Open System Settings → Privacy & Security → Files & Folders (or Full Disk Access) and allow Wii Memcard Manager, then Rescan."}
+              {/ENOENT|no such file/i.test(scanError) &&
+                " — that file or folder isn't there right now (unplugged SD card or moved file?). Pick it again with the pencil."}
+            </Typography>
+          )}
+
+          {!scanning && !scanError && gciFolder && rawPath && candidates.length === 0 && (
             <Typography variant="body2" color="text.secondary">
               No saves in this folder.
             </Typography>

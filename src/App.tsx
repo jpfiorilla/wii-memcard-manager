@@ -86,6 +86,7 @@ export default function App() {
             selectedPaths={w.selectedPaths}
             pathOverrides={w.pathOverrides}
             scanning={w.scanning}
+            scanError={w.scanError}
             gciFolder={w.gciFolder}
             rawPath={w.rawPath}
             onPathOverride={w.setPathOverride}

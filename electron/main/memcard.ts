@@ -1,4 +1,5 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { log } from './log'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import chokidar, { type FSWatcher } from 'chokidar'
@@ -33,7 +34,18 @@ let batchBuildRunning = false
 /** When a folder event fires while a batch is in progress, we coalesce into one rerun after it finishes. */
 const pendingBatchRoots = new Set<string>()
 
+/** Renderer events that are worth keeping in the log file (everything except UI chatter). */
+const LOGGED_CHANNELS = /batch-built|batch-build-error|sd-transfer|wii-sync-(request|delivered)/
+
 function broadcast(channel: string, payload: unknown) {
+  const quiet =
+    channel === 'memcard:batch-built' &&
+    (payload as { outputs?: unknown[]; errors?: unknown[] })?.outputs?.length === 0 &&
+    (payload as { errors?: unknown[] })?.errors?.length === 0
+  if (LOGGED_CHANNELS.test(channel) && !quiet) {
+    const isError = /error/.test(channel)
+    ;(isError ? log.warn : log.info)(`[${channel.replace('memcard:', '')}]`, payload)
+  }
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send(channel, payload)
   }
@@ -79,6 +91,10 @@ async function runBatchAndNotify(rootDir: string) {
   batchBuildRunning = true
   try {
     const r = await runGciBatchBuild(s)
+    if (r.ok && r.organized?.length) {
+      log.info(`[organize] moved ${r.organized.length} older recordings:`)
+      for (const m of r.organized) log.info(`  ${path.basename(m.from)} -> ${m.opponent}/`)
+    }
     if (!r.ok) {
       broadcast('memcard:batch-build-error', { error: r.error })
       return
@@ -278,6 +294,7 @@ export async function startFolderWatch(rootDir: string): Promise<{ ok: true } | 
     scheduleAutoBatch(rootDir)
   })
   watchers.set(rootDir, w)
+  log.info(`[watch] watching ${rootDir}`)
   // Pick up anything that arrived while the app wasn't running.
   scheduleAutoBatch(rootDir)
   ensurePeriodicRecheck()

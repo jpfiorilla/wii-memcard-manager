@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
 import { update } from './update'
+import { installConsoleLogging, log, logFilePath } from './log'
 import { registerMemcardIpc, resumeMemcardSession } from './memcard'
 import { createAppWindowIcon, createTrayMenuBarImage } from './trayIcon'
 
@@ -107,6 +108,8 @@ async function createWindow(startHidden = false) {
   update(win)
 }
 
+installConsoleLogging()
+log.info(`--- Wii Memcard Manager ${app.getVersion()} starting (packaged=${app.isPackaged}) ---`)
 registerMemcardIpc()
 
 /**
@@ -136,6 +139,7 @@ function launchedAtLogin(): boolean {
 app.whenReady().then(async () => {
   ensureLoginItemOnFirstRun()
   const startHidden = launchedAtLogin()
+  log.info(`ready; startHidden=${startHidden}; log file ${logFilePath()}`)
   if (startHidden) app.dock?.hide()
   createWindow(startHidden)
   await resumeMemcardSession()
@@ -158,6 +162,7 @@ app.whenReady().then(async () => {
     const buildTrayMenu = () =>
       Menu.buildFromTemplate([
         { label: 'Show', click: () => showMainWindow() },
+        { label: 'Open Log', click: () => void shell.openPath(logFilePath()) },
         { type: 'separator' },
         {
           label: 'Open at Login',

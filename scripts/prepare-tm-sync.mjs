@@ -40,6 +40,9 @@ if (!fs.existsSync(path.join(src, 'boot.dol'))) {
   fail(`no TM Sync build at ${src} (run: npm run fetch:tm-sync)`)
 } else {
   for (const f of ['boot.dol', 'meta.xml', 'config.ini']) fs.copyFileSync(path.join(src, f), path.join(out, f))
+  // Homebrew Channel icon: from the build if it has one, else straight from the repo
+  const icon = [path.join(src, 'icon.png'), path.join(root, 'tm-sync/icon.png')].find((f) => fs.existsSync(f))
+  if (icon) fs.copyFileSync(icon, path.join(out, 'icon.png'))
   const builtVersion = /<version>([^<]+)<\/version>/.exec(fs.readFileSync(path.join(out, 'meta.xml'), 'utf-8'))?.[1]
   if (builtVersion !== appVersion) fail(`TM Sync build at ${src} is ${builtVersion}, app is ${appVersion}`)
   console.log(`prepare-tm-sync: bundling TM Sync ${builtVersion} from ${src}`)

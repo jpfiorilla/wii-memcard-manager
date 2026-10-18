@@ -56,7 +56,7 @@ clean:
 package: $(BUILD)
 	@mkdir -p dist/apps/tm-sync
 	@cp $(OUTPUT).dol dist/apps/tm-sync/boot.dol
-	@cp meta.xml config.ini dist/apps/tm-sync/
+	@cp meta.xml config.ini icon.png dist/apps/tm-sync/
 	@echo packaged dist/apps/tm-sync
 
 #---------------------------------------------------------------------------------

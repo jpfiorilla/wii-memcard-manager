@@ -69,16 +69,28 @@ export async function syncTmSyncOnCard(mountPath: string): Promise<TmSyncCardRes
       fs.stat(path.join(dest, 'boot.dol')).catch(() => null),
       fs.stat(path.join(bundle, 'boot.dol')),
     ])
-    if (a && a.size === b.size) return { action: 'current', version }
+    if (a && a.size === b.size) {
+      await copyIcon(bundle, dest)
+      return { action: 'current', version }
+    }
   }
 
   await fs.mkdir(dest, { recursive: true })
   await fs.copyFile(path.join(bundle, 'boot.dol'), path.join(dest, 'boot.dol'))
   await fs.copyFile(path.join(bundle, 'meta.xml'), path.join(dest, 'meta.xml'))
+  await copyIcon(bundle, dest, true)
   if (!(await exists(path.join(dest, 'config.ini')))) {
     await fs.copyFile(path.join(bundle, 'config.ini'), path.join(dest, 'config.ini'))
   }
   return cardVersion
     ? { action: 'updated', version, from: cardVersion }
     : { action: 'installed', version }
+}
+
+/** Homebrew Channel icon. Added when missing; replaced on install/update. */
+async function copyIcon(bundle: string, dest: string, replace = false): Promise<void> {
+  const src = path.join(bundle, 'icon.png')
+  if (!(await exists(src))) return
+  if (!replace && (await exists(path.join(dest, 'icon.png')))) return
+  await fs.copyFile(src, path.join(dest, 'icon.png')).catch(() => {})
 }

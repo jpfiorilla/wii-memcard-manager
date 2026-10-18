@@ -4,6 +4,9 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import {
+
+/** Only TM Sync's own downloads count as delivered. */
+const TM = { 'User-Agent': 'tm-sync/1.0.0' }
   crc32,
   etagFor,
   ifNoneMatchHits,
@@ -63,7 +66,7 @@ describe('TM Sync server', () => {
     const v1 = Buffer.alloc(4096, 1)
     await fs.writeFile(path.join(dir, 'GTME.raw'), v1)
 
-    const r1 = await fetch(`${base()}/tmsync/v1/saves/gtme.raw`)
+    const r1 = await fetch(`${base()}/tmsync/v1/saves/gtme.raw`, { headers: TM })
     expect(r1.status).toBe(200)
     const body = Buffer.from(await r1.arrayBuffer())
     expect(body.equals(v1)).toBe(true)
@@ -73,19 +76,19 @@ describe('TM Sync server', () => {
     await new Promise((r) => setTimeout(r, 20))
     expect(delivered.at(-1)?.fileName).toBe('GTME.raw')
 
-    const r2 = await fetch(`${base()}/tmsync/v1/saves/GTME.raw`, { headers: { 'If-None-Match': etag } })
+    const r2 = await fetch(`${base()}/tmsync/v1/saves/GTME.raw`, { headers: { ...TM, 'If-None-Match': etag } })
     expect(r2.status).toBe(304)
     expect((await r2.arrayBuffer()).byteLength).toBe(0)
 
     // Rewriting identical bytes (new mtime) still 304s: identity is content, not timestamps.
     await new Promise((r) => setTimeout(r, 20))
     await fs.writeFile(path.join(dir, 'GTME.raw'), v1)
-    const r3 = await fetch(`${base()}/tmsync/v1/saves/GTME.raw`, { headers: { 'If-None-Match': etag } })
+    const r3 = await fetch(`${base()}/tmsync/v1/saves/GTME.raw`, { headers: { ...TM, 'If-None-Match': etag } })
     expect(r3.status).toBe(304)
 
     const v2 = Buffer.alloc(4096, 2)
     await fs.writeFile(path.join(dir, 'GTME.raw'), v2)
-    const r4 = await fetch(`${base()}/tmsync/v1/saves/GTME.raw`, { headers: { 'If-None-Match': etag } })
+    const r4 = await fetch(`${base()}/tmsync/v1/saves/GTME.raw`, { headers: { ...TM, 'If-None-Match': etag } })
     expect(r4.status).toBe(200)
     expect(Buffer.from(await r4.arrayBuffer()).equals(v2)).toBe(true)
   })

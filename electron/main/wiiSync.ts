@@ -71,6 +71,7 @@ async function doReconfigure(broadcast: Broadcast) {
         await fs.writeFile(file, text, 'latin1')
         console.log(`[tmsync] saved the Wii's log from ${remote} (${text.length} bytes) to ${file}`)
       },
+      expectedClientVersion: app.getVersion(),
       log: (m) => console.log(m),
     })
     lastError = null

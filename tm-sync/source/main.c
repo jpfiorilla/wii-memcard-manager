@@ -33,8 +33,8 @@
 #include "dolboot.h"
 #include "log.h"
 #include "netio.h"
+#include "version.h"
 
-#define TMSYNC_VERSION "1.0.0"
 
 /* NIN_CFG fields we touch (see project-slippi/Nintendont common/include/CommonConfig.h). */
 #define NIN_MAGIC 0x01070CF6u

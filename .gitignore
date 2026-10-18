@@ -27,3 +27,6 @@ release
 /test-results/
 /playwright-report/
 /playwright/.cache/
+
+# TM Sync copied in by scripts/prepare-tm-sync.mjs
+/build/tm-sync-bundle/

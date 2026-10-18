@@ -18,14 +18,15 @@ and multi-card mode off so the synced card is the one that loads.
 
 ## Install
 
-1. Download `tm-sync.zip` from the GitHub release (or the *TM Sync* workflow artifact) and
-   unzip it onto the SD card so you have `sd:/apps/tm-sync/boot.dol`.
-2. On the Mac, keep Wii Memcard Manager open with **Serve staged images to the Wii** on
-   (Settings → Wii TM Sync). Allow incoming connections if macOS asks.
-3. Launch TM:CE once from regular Nintendont (from the SD card) so it becomes the last-played game.
-4. Launch **TM Sync** from the Homebrew Channel instead of Nintendont.
-   To make it automatic, set it as the Homebrew Channel / Priiloader autoboot.
+You normally don't install this by hand: put the Wii's SD card into the Mac running Wii Memcard
+Manager and the app installs (or updates) `sd:/apps/tm-sync/` and writes its own address into
+`config.ini`. TM Sync's version always matches the app's; it sends it as `User-Agent: tm-sync/<version>`
+and the app logs a warning if they differ.
 
+Manual install: unzip `tm-sync-<version>.zip` from the release onto the SD card.
+
+Then launch TM:CE once from regular Nintendont (so it's the last-played game) and start
+**TM Sync** from the Homebrew Channel from then on (or make it the Homebrew Channel / Priiloader autoboot).
 It boots the last game you played in Nintendont (from `sd:/nincfg.bin`).
 
 ## Controls
@@ -36,8 +37,10 @@ It boots the last game you played in Nintendont (from `sd:/nincfg.bin`).
 
 ## config.ini
 
-Created on first run at `sd:/apps/tm-sync/config.ini`. Defaults work for most setups:
-`host=` blank auto-discovers the Mac (UDP 8643); set `host=<Mac IP>` if discovery doesn't reach it.
+`sd:/apps/tm-sync/config.ini`. `host=`/`port=` are filled in by the Mac app whenever the SD card is
+plugged into it; TM Sync asks that address directly over HTTP. If it can't reach it (the Mac's address
+changed), it searches the network over UDP 8643, and remembers what it finds in `last_mac.txt`.
+`timeout=` (default 40 s) covers Wi-Fi bring-up (retried, since the Wii's Wi-Fi is flaky) and the download.
 `nintendont=` / `nincfg=` blank auto-detect `apps/Nintendont/boot.dol` + `nincfg.bin` (falling back to Slippi Nintendont + `slippi_nincfg.bin`).
 
 ## Build

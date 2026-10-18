@@ -1,11 +1,13 @@
 name: TM Sync (Wii app)
 
+# Branch/PR builds of TM Sync (artifact "tm-sync", used by `npm run fetch:tm-sync`).
+# Releases build and publish TM Sync together with the app in build-release.yml.
+
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths: ["tm-sync/**", ".github/workflows/tm-sync.yml"]
-    tags: ["v*"]
   pull_request:
     paths: ["tm-sync/**"]
 
@@ -27,11 +29,3 @@ jobs:
           name: tm-sync
           path: tm-sync.zip
           if-no-files-found: error
-      - name: Attach to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: tm-sync.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

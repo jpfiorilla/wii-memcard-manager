@@ -76,6 +76,8 @@ export type WiiSyncRequestLog = {
   remoteAddress: string | undefined
   fileName: string
   status: number
+  /** TM Sync's version from its User-Agent (tm-sync/<version>), if it sent one. */
+  clientVersion?: string
 }
 
 export type WiiSyncServerOptions = {
@@ -88,6 +90,8 @@ export type WiiSyncServerOptions = {
   onRequest?: (r: WiiSyncRequestLog) => void
   /** Called with the Wii's own TM Sync log when it uploads one (POST /tmsync/v1/log). */
   onWiiLog?: (text: string, remoteAddress: string | undefined) => void | Promise<void>
+  /** This app's version; TM Sync on the Wii should match it (they ship as one release). */
+  expectedClientVersion?: string
   log?: (msg: string) => void
 }
 
@@ -104,6 +108,7 @@ export async function startWiiSyncServer(opts: WiiSyncServerOptions): Promise<Wi
   const discoveryPort = opts.discoveryPort ?? TMSYNC_DISCOVERY_PORT
   const log = opts.log ?? (() => {})
   const cache = new Map<string, CacheEntry>()
+  const warnedVersions = new Set<string>()
 
   async function load(absPath: string): Promise<CacheEntry | null> {
     let st
@@ -129,9 +134,22 @@ export async function startWiiSyncServer(opts: WiiSyncServerOptions): Promise<Wi
         res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8', Connection: 'close' })
         res.end(req.method === 'HEAD' ? undefined : body)
         log(`[tmsync] ${remote} ${req.method} ${url} -> ${status}${status >= 400 ? ` (${body.trim()})` : ''}`)
-        if (fileName) opts.onRequest?.({ at: Date.now(), remoteAddress: remote, fileName, status })
+        if (fileName) opts.onRequest?.({ at: Date.now(), remoteAddress: remote, fileName, status, clientVersion })
       }
       log(`[tmsync] ${remote} ${req.method} ${url} if-none-match=${req.headers['if-none-match'] ?? '-'} ua=${req.headers['user-agent'] ?? '-'}`)
+      const clientVersion = /^tm-sync\/(\S+)/.exec(String(req.headers['user-agent'] ?? ''))?.[1]
+      if (
+        clientVersion &&
+        opts.expectedClientVersion &&
+        clientVersion !== opts.expectedClientVersion &&
+        !warnedVersions.has(clientVersion)
+      ) {
+        warnedVersions.add(clientVersion)
+        log(
+          `[tmsync] WARNING: the Wii runs TM Sync ${clientVersion} but this app is ${opts.expectedClientVersion}; ` +
+            'plug the Wii SD card into this Mac once to update it',
+        )
+      }
 
       if (req.method === 'POST' && url === '/tmsync/v1/log') {
         const chunks: Buffer[] = []
@@ -168,7 +186,7 @@ export async function startWiiSyncServer(opts: WiiSyncServerOptions): Promise<Wi
         res.writeHead(304, headers)
         res.end()
         log(`[tmsync] ${remote} ${fileName} 304 (up to date)`)
-        opts.onRequest?.({ at: Date.now(), remoteAddress: remote, fileName, status: 304 })
+        opts.onRequest?.({ at: Date.now(), remoteAddress: remote, fileName, status: 304, clientVersion })
         return
       }
 
@@ -183,7 +201,7 @@ export async function startWiiSyncServer(opts: WiiSyncServerOptions): Promise<Wi
       }
       res.end(entry.buf, () => {
         log(`[tmsync] ${remote} ${fileName} 200 (${entry.buf.length} bytes, etag ${entry.etag})`)
-        opts.onRequest?.({ at: Date.now(), remoteAddress: remote, fileName, status: 200 })
+        opts.onRequest?.({ at: Date.now(), remoteAddress: remote, fileName, status: 200, clientVersion })
         // Only TM Sync on the Wii counts as "the Wii has it". Other clients (the T-Dongle firmware,
         // curl) must not cancel the fallback copy to the SD card.
         const ua = String(req.headers['user-agent'] ?? '')

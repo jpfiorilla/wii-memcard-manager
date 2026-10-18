@@ -14,6 +14,7 @@ import {
 import { BUILD_GAMES, CARD_SIZE_MB, batchStep, resolveStagingDir, runGciBatchBuild } from './gciBatchPipeline'
 import { captureHeadersFromSavesDir, patchCardFile } from './cardHeaders'
 import { pointTmSyncAtThisMac } from './tmSyncConfig'
+import { syncTmSyncOnCard } from './tmSyncInstall'
 import { mergeUserSettings, readUserSettings, type MemcardUserSettings } from './userSettings'
 import { peekPendingSdAll, removePendingByLocalPath } from './pendingSdQueue'
 import { showMemcardNotification } from './notifications'
@@ -184,6 +185,7 @@ async function processSdTransfersForSavesDir(
 }
 
 /** Copy pending staging .raw files to any mounted SD that exposes `nintendont/saves` (or configured path). */
+const loggedTmSyncSkips = new Set<string>()
 async function processPendingSdOnAllVolumes(opts?: { notifyEachCopy?: boolean }) {
   if (process.platform !== 'darwin') return
   const s = await readUserSettings()
@@ -199,8 +201,22 @@ async function processPendingSdOnAllVolumes(opts?: { notifyEachCopy?: boolean })
       continue
     }
     if (!isPathInsideRoot(mountPath, savesDir)) continue
-    // Point TM Sync on this card at this Mac (no IP addresses to type in).
+    // Install / update TM Sync on this card from the copy bundled in the app, then point it at
+    // this Mac (no IP addresses to type in).
     if (s.wiiSyncEnabled) {
+      try {
+        const r = await syncTmSyncOnCard(mountPath)
+        if (r.action === 'installed' || r.action === 'updated') {
+          const what = r.action === 'installed' ? `installed TM Sync ${r.version}` : `updated TM Sync ${r.from} -> ${r.version}`
+          log.info(`[tm-sync-install] ${mountPath}: ${what}`)
+          void showMemcardNotification('TM Sync', `${what} on ${path.basename(mountPath)}. Launch it from the Homebrew Channel.`)
+        } else if (r.action === 'skipped' && !loggedTmSyncSkips.has(`${mountPath}:${r.reason}`)) {
+          loggedTmSyncSkips.add(`${mountPath}:${r.reason}`)
+          log.info(`[tm-sync-install] ${mountPath}: skipped (${r.reason})`)
+        }
+      } catch (e) {
+        log.warn('[tm-sync-install] could not install TM Sync', e)
+      }
       try {
         await pointTmSyncAtThisMac(mountPath, s.wiiSyncPort)
       } catch (e) {

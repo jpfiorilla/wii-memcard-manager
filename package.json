@@ -16,7 +16,8 @@
   "scripts": {
     "dev": "vite",
     "build:icons": "node scripts/build-icons.mjs",
-    "build": "tsc && vite build && electron-builder --publish never",
+    "build": "node scripts/prepare-tm-sync.mjs && tsc && vite build && electron-builder --publish never",
+    "fetch:tm-sync": "node scripts/fetch-tm-sync.mjs",
     "preview": "vite preview",
     "pretest": "vite build --mode=test",
     "test": "vitest run"

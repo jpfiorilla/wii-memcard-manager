@@ -1,5 +1,6 @@
 #include "netio.h"
 #include "log.h"
+#include "version.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -264,7 +265,7 @@ bool tm_http_get(uint32_t ip, int port, const char *path, const char *if_none_ma
 	int reqlen = snprintf(req, sizeof(req),
 		"GET %s HTTP/1.0\r\n"
 		"Host: %s:%d\r\n"
-		"User-Agent: tm-sync/1\r\n"
+		"User-Agent: tm-sync/" TMSYNC_VERSION "\r\n"
 		"%s%s%s"
 		"Connection: close\r\n\r\n",
 		path, ipbuf, port,
@@ -389,7 +390,7 @@ bool tm_http_post(uint32_t ip, int port, const char *path, const uint8_t *body, 
 	char ipbuf[20], hdr[256];
 	tm_format_ipv4(ip, ipbuf, sizeof(ipbuf));
 	int hl = snprintf(hdr, sizeof(hdr),
-		"POST %s HTTP/1.0\r\nHost: %s:%d\r\nUser-Agent: tm-sync/1\r\n"
+		"POST %s HTTP/1.0\r\nHost: %s:%d\r\nUser-Agent: tm-sync/" TMSYNC_VERSION "\r\n"
 		"Content-Type: text/plain\r\nContent-Length: %u\r\nConnection: close\r\n\r\n",
 		path, ipbuf, port, (unsigned)body_len);
 	const uint8_t *parts[2] = { (const uint8_t *)hdr, body };

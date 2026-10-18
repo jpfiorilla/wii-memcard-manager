@@ -58,7 +58,7 @@ export async function scanGciFolderAgainstRaw(
     const code = (e as NodeJS.ErrnoException)?.code
     cardError =
       code === 'ENOENT'
-        ? `Target card ${rawPath} doesn't exist right now (SD card unplugged?)`
+        ? `${path.basename(rawPath)} hasn't been built yet (${rawPath})`
         : `Can't open target card ${rawPath}: ${e instanceof Error ? e.message : String(e)}`
   }
 

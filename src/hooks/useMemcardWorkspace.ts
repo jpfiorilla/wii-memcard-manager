@@ -116,7 +116,9 @@ export function useMemcardWorkspace() {
         const s = await window.memcard.getUserSettings();
         if (cancelled) return;
         if (s.gciFolder) setGciFolder(s.gciFolder);
-        if (s.rawPath) setRawPath(s.rawPath);
+        const target = await window.memcard.resolveTargetCard();
+        if (cancelled) return;
+        setRawPath(target.path);
         if (s.gciFolder && s.folderWatchEnabled) {
           setWatching(true);
         }

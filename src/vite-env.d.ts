@@ -82,6 +82,8 @@ export type GciFolderEntry = {
 
 export type MemcardApi = {
   getUserSettings: () => Promise<MemcardUserSettings>
+  /** Saved .raw if it exists, else the auto-built staged GTME.raw. */
+  resolveTargetCard: () => Promise<{ path: string; auto: boolean }>
   mergeUserSettings: (partial: Partial<MemcardUserSettings>) => Promise<MemcardUserSettings>
   pickDirectory: (defaultPath?: string | null) => Promise<string | null>
   pickFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>

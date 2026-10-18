@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
 
 contextBridge.exposeInMainWorld('memcard', {
   getUserSettings: () => ipcRenderer.invoke('memcard:getUserSettings'),
+  resolveTargetCard: () => ipcRenderer.invoke('memcard:resolveTargetCard'),
   mergeUserSettings: (partial: {
     gciFolder?: string | null
     rawPath?: string | null

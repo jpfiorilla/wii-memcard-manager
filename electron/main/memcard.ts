@@ -454,6 +454,18 @@ export function registerMemcardIpc() {
 
   ipcMain.handle('memcard:getUserSettings', async () => readUserSettings())
 
+  // The card the window compares against: the user's pick if it exists, else the auto-built one.
+  ipcMain.handle('memcard:resolveTargetCard', async () => {
+    const s = await readUserSettings()
+    const staged = path.join(resolveStagingDir(s), 'GTME.raw')
+    if (s.rawPath && s.rawPath !== staged) {
+      const ok = await fs.stat(s.rawPath).then((st) => st.isFile()).catch(() => false)
+      if (ok) return { path: s.rawPath, auto: false }
+      log.info(`[target] saved card ${s.rawPath} is missing; using auto-built ${staged}`)
+    }
+    return { path: staged, auto: true }
+  })
+
   ipcMain.handle('memcard:getWiiSyncStatus', async () => getWiiSyncStatus())
 
   ipcMain.handle('memcard:mergeUserSettings', async (_event, partial: Partial<MemcardUserSettings>) => {

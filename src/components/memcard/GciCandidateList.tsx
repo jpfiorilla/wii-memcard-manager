@@ -180,8 +180,7 @@ export function GciCandidateList({
 
           {!scanning && !scanError && cardError && (
             <Typography variant="body2" color="warning.main">
-              {cardError}. Saves are listed below, but nothing can be applied until the card is back,
-              or point the pink pencil at another GTME.raw.
+              {cardError}. It's built automatically from this folder; saves are listed below.
             </Typography>
           )}
 

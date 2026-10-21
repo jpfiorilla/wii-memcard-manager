@@ -4,9 +4,6 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import {
-
-/** Only TM Sync's own downloads count as delivered. */
-const TM = { 'User-Agent': 'tm-sync/1.0.0' }
   crc32,
   etagFor,
   ifNoneMatchHits,
@@ -14,6 +11,9 @@ const TM = { 'User-Agent': 'tm-sync/1.0.0' }
   type WiiSyncDelivery,
   type WiiSyncServerHandle,
 } from '../electron/main/wiiSyncServer'
+
+/** Only TM Sync's own downloads count as delivered. */
+const TM = { 'User-Agent': 'tm-sync/1.0.0' }
 
 describe('crc32', () => {
   it('matches the standard check value', () => {

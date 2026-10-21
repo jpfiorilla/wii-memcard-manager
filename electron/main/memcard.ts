@@ -20,7 +20,22 @@ import { peekPendingSdAll, removePendingByLocalPath } from './pendingSdQueue'
 import { showMemcardNotification } from './notifications'
 import { copyLocalRawToSdSaves, isPathInsideRoot } from './sdTransfer'
 import { startVolumeWatcherMacos, stopVolumeWatcher } from './volumeWatcher'
-import { getWiiSyncStatus, reconfigureWiiSync } from './wiiSync'
+import { getWiiSyncStatus, onCardDelivered, reconfigureWiiSync } from './wiiSync'
+import { EventEmitter } from 'node:events'
+import { randomUUID } from 'node:crypto'
+import { scanLibrary } from './recordingLibrary'
+import {
+  DEFAULT_PLAYLIST,
+  playlistName,
+  playlistShuffles,
+  resolvePlaylistId,
+  sanitizeCustomPlaylist,
+  selectRecordings,
+  summarizePlaylists,
+  type CustomPlaylist,
+  type PlaylistSummary,
+} from './playlists'
+import { ckindName } from './gcmemcard/tmceExportHeader'
 
 export type MemcardFolderEvent = {
   rootDir: string
@@ -114,6 +129,7 @@ async function runBatchAndNotify(rootDir: string) {
       return
     }
     broadcast('memcard:batch-built', { outputs: r.outputs, errors: r.errors })
+    if (r.outputs.length || r.organized?.length) playlistsChanged()
     await processPendingSdOnAllVolumes({ notifyEachCopy: false })
     await notifyAfterBatchPipelineMacos(r.outputs, r.errors)
   } catch (e) {
@@ -372,7 +388,11 @@ export async function resumeMemcardSession() {
     mainCharacter: s.mainCharacter,
     wiiSyncEnabled: s.wiiSyncEnabled,
     wiiSyncPort: s.wiiSyncPort,
+    activePlaylist: s.activePlaylist,
+    customPlaylists: s.customPlaylists.length,
+    includeArchive: s.includeArchive,
   })
+  registerReshuffleOnSync()
   if (s.gciFolder && s.folderWatchEnabled) {
     await startFolderWatch(s.gciFolder)
   }
@@ -404,7 +424,139 @@ export async function backupRawBeforeWrite(
   }
 }
 
+// ---------------------------------------------------------------- playlists
+
+export type PlaylistView = {
+  folder: string | null
+  active: string
+  activeName: string
+  shuffles: boolean
+  playlists: PlaylistSummary[]
+  /** Recordings the active playlist puts on the card, in card order. */
+  card: { path: string; name: string; opponent: number | null }[]
+  gameSaves: number
+  recordingCount: number
+  archiveCount: number
+  includeArchive: boolean
+  cap: number
+}
+
+const playlistEvents = new EventEmitter()
+/** The tray menu listens so its checkmark follows changes made in the window (and vice versa). */
+export function onPlaylistsChanged(fn: () => void): void {
+  playlistEvents.on('changed', fn)
+}
+function playlistsChanged() {
+  playlistEvents.emit('changed')
+  broadcast('memcard:playlists-changed', {})
+}
+
+async function rebuildNow() {
+  const s = await readUserSettings()
+  if (s.gciFolder) await runBatchAndNotify(s.gciFolder)
+}
+
+export async function getPlaylistView(): Promise<PlaylistView> {
+  const s = await readUserSettings()
+  const cap = Math.max(1, s.maxReplaysPerCard)
+  const active = resolvePlaylistId(s.activePlaylist, s.customPlaylists)
+  const base = {
+    folder: s.gciFolder,
+    active,
+    activeName: playlistName(active, s.customPlaylists, ckindName),
+    shuffles: playlistShuffles(active, s.customPlaylists),
+    includeArchive: s.includeArchive,
+    cap,
+  }
+  if (!s.gciFolder) {
+    return { ...base, playlists: summarizePlaylists([], s.customPlaylists, cap, ckindName), card: [], gameSaves: 0, recordingCount: 0, archiveCount: 0 }
+  }
+  const lib = await scanLibrary(s.gciFolder, {
+    includeArchive: s.includeArchive,
+    mainCharacter: s.mainCharacter,
+    gameCode: 'GTME',
+  })
+  const picked = selectRecordings(lib.recordings, active, s.customPlaylists, cap, s.shuffleSeed)
+  return {
+    ...base,
+    playlists: summarizePlaylists(lib.recordings, s.customPlaylists, cap, ckindName),
+    card: picked.map((r) => ({ path: r.path, name: r.name, opponent: r.opponent })),
+    gameSaves: lib.gameSaves.length,
+    recordingCount: lib.recordings.length,
+    archiveCount: lib.archiveCount,
+  }
+}
+
+export async function setActivePlaylist(id: string): Promise<void> {
+  const s = await readUserSettings()
+  const resolved = resolvePlaylistId(id, s.customPlaylists)
+  log.info(`[playlist] now "${playlistName(resolved, s.customPlaylists, ckindName)}" (${resolved})`)
+  await mergeUserSettings({ activePlaylist: resolved })
+  playlistsChanged()
+  void rebuildNow()
+}
+
+export async function savePlaylist(raw: Partial<CustomPlaylist>): Promise<{ ok: true; playlist: CustomPlaylist } | { ok: false; error: string }> {
+  const s = await readUserSettings()
+  const p = sanitizeCustomPlaylist({ ...raw, id: raw.id || `yours:${randomUUID().slice(0, 8)}` })
+  if (!p) return { ok: false, error: 'A playlist needs a name.' }
+  const exists = s.customPlaylists.some((c) => c.id === p.id)
+  const customPlaylists = exists ? s.customPlaylists.map((c) => (c.id === p.id ? p : c)) : [...s.customPlaylists, p]
+  await mergeUserSettings({ customPlaylists })
+  log.info(`[playlist] ${exists ? 'updated' : 'created'} "${p.name}" (${p.id})`, p)
+  playlistsChanged()
+  if (s.activePlaylist === p.id) void rebuildNow()
+  return { ok: true, playlist: p }
+}
+
+export async function deletePlaylist(id: string): Promise<void> {
+  const s = await readUserSettings()
+  const wasActive = s.activePlaylist === id
+  await mergeUserSettings({
+    customPlaylists: s.customPlaylists.filter((c) => c.id !== id),
+    ...(wasActive ? { activePlaylist: DEFAULT_PLAYLIST } : {}),
+  })
+  log.info(`[playlist] deleted ${id}${wasActive ? '; back to Latest' : ''}`)
+  playlistsChanged()
+  if (wasActive) void rebuildNow()
+}
+
+/** Short list for the menu bar: Recent, the three biggest matchups, Yours, and the active one. */
+export async function trayPlaylists(): Promise<{ id: string; name: string; opponent?: number; checked: boolean }[]> {
+  const v = await getPlaylistView()
+  const recent = v.playlists.filter((p) => p.group === 'recent')
+  const matchups = v.playlists.filter((p) => p.group === 'matchup').slice(0, 3)
+  const yours = v.playlists.filter((p) => p.group === 'yours')
+  const list = [...recent, ...matchups, ...yours]
+  if (!list.some((p) => p.id === v.active)) {
+    const a = v.playlists.find((p) => p.id === v.active)
+    if (a) list.push(a)
+  }
+  return list.map((p) => ({ id: p.id, name: p.name, opponent: p.opponent, checked: p.id === v.active }))
+}
+
+let reshuffleRegistered = false
+function registerReshuffleOnSync() {
+  if (reshuffleRegistered) return
+  reshuffleRegistered = true
+  onCardDelivered(() => {
+    void (async () => {
+      const s = await readUserSettings()
+      if (!playlistShuffles(s.activePlaylist, s.customPlaylists)) return
+      await mergeUserSettings({ shuffleSeed: s.shuffleSeed + 1 })
+      log.info('[playlist] Wii synced a shuffled card; building a new mix for next time')
+      playlistsChanged()
+      await rebuildNow()
+    })()
+  })
+}
+
 export function registerMemcardIpc() {
+  ipcMain.handle('memcard:getPlaylistView', async () => getPlaylistView())
+  ipcMain.handle('memcard:setActivePlaylist', async (_e, id: string) => setActivePlaylist(id))
+  ipcMain.handle('memcard:savePlaylist', async (_e, p: Partial<CustomPlaylist>) => savePlaylist(p))
+  ipcMain.handle('memcard:deletePlaylist', async (_e, id: string) => deletePlaylist(id))
+
   ipcMain.handle('memcard:pickDirectory', async (event, defaultPath?: string | null) => {
     const win =
       BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow()
@@ -473,6 +625,15 @@ export function registerMemcardIpc() {
     reconfigureVolumeWatcher()
     if (partial.wiiSyncEnabled !== undefined || partial.wiiSyncPort !== undefined) {
       await reconfigureWiiSync(broadcast)
+    }
+    if (
+      partial.includeArchive !== undefined ||
+      partial.maxReplaysPerCard !== undefined ||
+      partial.mainCharacter !== undefined ||
+      partial.gciFolder !== undefined
+    ) {
+      playlistsChanged()
+      void rebuildNow()
     }
     await processPendingSdOnAllVolumes()
     return next

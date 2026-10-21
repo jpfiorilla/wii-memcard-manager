@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { app } from 'electron'
+import { DEFAULT_PLAYLIST, sanitizeCustomPlaylist, type CustomPlaylist } from './playlists'
 
 export type GciPathOverride = 'neutral' | 'exclude' | 'include'
 
@@ -41,6 +42,14 @@ export type MemcardUserSettings = {
   autoOrganizeGcis: boolean
   /** Melee external character ID (CKIND) you play; its opponent names the folder. 9 = Marth. */
   mainCharacter: number
+  /** Playlist that decides what goes on the card (`latest`, `matchup:20`, `yours:…`). */
+  activePlaylist: string
+  /** Playlists the user made. */
+  customPlaylists: CustomPlaylist[]
+  /** Also draw recordings from the folder's `archive/` subfolder. */
+  includeArchive: boolean
+  /** Seed for shuffling playlists; bumped after each Wii sync for a new mix. */
+  shuffleSeed: number
 }
 
 function sanitizeGciPathOverrides(
@@ -83,6 +92,10 @@ const defaults: MemcardUserSettings = {
   maxReplaysPerCard: 25,
   autoOrganizeGcis: true,
   mainCharacter: 9,
+  activePlaylist: DEFAULT_PLAYLIST,
+  customPlaylists: [],
+  includeArchive: false,
+  shuffleSeed: 1,
 }
 
 function filePath(): string {
@@ -122,6 +135,10 @@ function merge(a: MemcardUserSettings, partial: Partial<MemcardUserSettings>): M
     autoOrganizeGcis:
       partial.autoOrganizeGcis !== undefined ? partial.autoOrganizeGcis : a.autoOrganizeGcis,
     mainCharacter: partial.mainCharacter !== undefined ? partial.mainCharacter : a.mainCharacter,
+    activePlaylist: partial.activePlaylist !== undefined ? partial.activePlaylist : a.activePlaylist,
+    customPlaylists: partial.customPlaylists !== undefined ? partial.customPlaylists : a.customPlaylists,
+    includeArchive: partial.includeArchive !== undefined ? partial.includeArchive : a.includeArchive,
+    shuffleSeed: partial.shuffleSeed !== undefined ? partial.shuffleSeed : a.shuffleSeed,
   }
 }
 
@@ -179,6 +196,16 @@ export async function readUserSettings(): Promise<MemcardUserSettings> {
         parsed.mainCharacter <= 25
           ? parsed.mainCharacter
           : defaults.mainCharacter,
+      activePlaylist:
+        typeof parsed.activePlaylist === 'string' && parsed.activePlaylist.length > 0
+          ? parsed.activePlaylist
+          : defaults.activePlaylist,
+      customPlaylists: Array.isArray(parsed.customPlaylists)
+        ? parsed.customPlaylists.map(sanitizeCustomPlaylist).filter((p): p is CustomPlaylist => p !== null)
+        : [],
+      includeArchive: typeof parsed.includeArchive === 'boolean' ? parsed.includeArchive : defaults.includeArchive,
+      shuffleSeed:
+        typeof parsed.shuffleSeed === 'number' && Number.isInteger(parsed.shuffleSeed) ? parsed.shuffleSeed : defaults.shuffleSeed,
     })
   } catch {
     return { ...defaults }

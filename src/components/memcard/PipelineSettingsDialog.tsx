@@ -55,7 +55,7 @@ export function PipelineSettingsDialog({
             value={capDraft}
             onChange={(e) => setCapDraft(e.target.value)}
             onBlur={commitCap}
-            helperText="The newest recordings in the folder go on the Wii."
+            helperText="The most a playlist puts on the card."
             inputProps={{ min: 1, max: 60 }}
           />
 
@@ -88,8 +88,8 @@ export function PipelineSettingsDialog({
             <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
               <Typography variant="body1">File older recordings by opponent</Typography>
               <Typography variant="caption" color="text.secondary">
-                Anything past the newest {pipeline.maxReplaysPerCard} moves into a folder like{" "}
-                <code>Falco/</code>. Nothing is deleted.
+                Recordings that aren't on the card move into a folder like <code>Falco/</code>. Playlists
+                still find them there. Nothing is deleted.
               </Typography>
             </Box>
           </Box>

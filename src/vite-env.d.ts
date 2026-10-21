@@ -28,6 +28,45 @@ export type MemcardUserSettings = {
   maxReplaysPerCard: number
   autoOrganizeGcis: boolean
   mainCharacter: number
+  activePlaylist: string
+  customPlaylists: CustomPlaylist[]
+  includeArchive: boolean
+  shuffleSeed: number
+}
+
+export type PlaylistOrder = 'newest' | 'shuffle'
+
+export type CustomPlaylist = {
+  id: string
+  name: string
+  /** Opponent character ids (Melee CKIND); empty = any matchup. */
+  matchups: number[]
+  order: PlaylistOrder
+  count: number
+}
+
+export type PlaylistSummary = {
+  id: string
+  name: string
+  group: 'recent' | 'matchup' | 'yours'
+  description: string
+  opponent?: number
+  available: number
+  shuffles: boolean
+}
+
+export type PlaylistView = {
+  folder: string | null
+  active: string
+  activeName: string
+  shuffles: boolean
+  playlists: PlaylistSummary[]
+  card: { path: string; name: string; opponent: number | null }[]
+  gameSaves: number
+  recordingCount: number
+  archiveCount: number
+  includeArchive: boolean
+  cap: number
 }
 
 export type WiiSyncRequestLog = {
@@ -82,6 +121,13 @@ export type GciFolderEntry = {
 
 export type MemcardApi = {
   getUserSettings: () => Promise<MemcardUserSettings>
+  getPlaylistView: () => Promise<PlaylistView>
+  setActivePlaylist: (id: string) => Promise<void>
+  savePlaylist: (
+    p: Omit<CustomPlaylist, 'id'> & { id?: string },
+  ) => Promise<{ ok: true; playlist: CustomPlaylist } | { ok: false; error: string }>
+  deletePlaylist: (id: string) => Promise<void>
+  onPlaylistsChanged: (callback: () => void) => () => void
   /** Saved .raw if it exists, else the auto-built staged GTME.raw. */
   resolveTargetCard: () => Promise<{ path: string; auto: boolean }>
   mergeUserSettings: (partial: Partial<MemcardUserSettings>) => Promise<MemcardUserSettings>

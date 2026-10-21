@@ -60,6 +60,13 @@ export const CKIND_NAMES = [
 
 export const CKIND_MARTH = 9
 
+/** Folder names of the stock icons in public/charactericons/, in CKIND order. */
+export const CKIND_ICON_SLUGS = [
+  'captain-falcon', 'donkey-kong', 'fox', 'game-and-watch', 'kirby', 'bowser', 'link', 'luigi', 'mario',
+  'marth', 'mewtwo', 'ness', 'peach', 'pikachu', 'ice-climbers', 'jigglypuff', 'samus', 'yoshi',
+  'zelda', 'sheik', 'falco', 'young-link', 'dr-mario', 'roy', 'pichu', 'ganondorf',
+] as const
+
 export function ckindName(id: number): string | null {
   return CKIND_NAMES[id] ?? null
 }
@@ -115,7 +122,7 @@ export function decodeTmceExportHeader(gci: Uint8Array): TmceExportHeader | null
  * The character the player is practicing against: the CPU when the human is `mainCharacter`,
  * the human when the CPU is `mainCharacter` (recording taken from the other side), else the CPU.
  */
-export function opponentOf(h: TmceExportHeader, mainCharacter: number): number {
+export function opponentOf(h: Pick<TmceExportHeader, 'hmn' | 'cpu'>, mainCharacter: number): number {
   if (h.hmn === mainCharacter && h.cpu !== mainCharacter) return h.cpu
   if (h.cpu === mainCharacter && h.hmn !== mainCharacter) return h.hmn
   return h.cpu

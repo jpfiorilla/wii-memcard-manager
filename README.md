@@ -1,14 +1,18 @@
 # Wii Memcard Manager
 
-Keeps a **Training Mode CE** memory card on a real Wii stocked with your newest recordings.
+Keeps a **Training Mode CE** memory card on a real Wii stocked with the recordings you want to practice.
 Record a situation in TM:CE, export the `.gci` to a folder (e.g. Google Drive), and the next time the
 Wii starts **TM Sync** it downloads the updated card over Wi-Fi and boots TM:CE.
 
 It's two programs released together, always with the same version number:
 
 - **Wii Memcard Manager** (Mac, menu bar): watches your `.gci` folder, builds `GTME.raw`
-  (Nintendont's 251-block size, the game's own save + your newest 25 recordings), and serves it on
-  your home network.
+  (Nintendont's 251-block size, the game's own save + up to 25 recordings picked by a playlist), and
+  serves it on your home network.
+
+  Pick a **playlist** in the window or from the menu bar: **Latest**, **Latest of each** (3 newest per
+  matchup), **Shuffle** (a new random mix after every Wii sync), one per **matchup** (every recording
+  against Falco, say), or **your own** (choose matchups, newest first or shuffled, and how many).
 - **TM Sync** (Wii, Homebrew Channel): fetches that card before booting regular Nintendont.
   It's bundled inside the Mac app; you don't download it separately.
 

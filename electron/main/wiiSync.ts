@@ -30,6 +30,12 @@ let handle: WiiSyncServerHandle | null = null
 let lastError: string | null = null
 let lastRequest: WiiSyncRequestLog | null = null
 let reconfiguring: Promise<void> = Promise.resolve()
+const deliveredListeners = new Set<(d: WiiSyncDelivery) => void>()
+
+/** Called each time TM Sync downloads a card (used to re-roll shuffling playlists). */
+export function onCardDelivered(fn: (d: WiiSyncDelivery) => void): void {
+  deliveredListeners.add(fn)
+}
 
 type Broadcast = (channel: string, payload: unknown) => void
 
@@ -64,6 +70,7 @@ async function doReconfigure(broadcast: Broadcast) {
         // The Wii now has this image; no need to also copy it on the next SD mount.
         void removePendingByLocalPath(d.localPath)
         broadcast('memcard:wii-sync-delivered', d)
+        for (const fn of deliveredListeners) fn(d)
       },
       onWiiLog: async (text, remote) => {
         // The Wii sends the tail of sd:/apps/tm-sync/tmsync.log after each run that reaches the Mac.

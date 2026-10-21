@@ -70,7 +70,17 @@ contextBridge.exposeInMainWorld('memcard', {
     maxReplaysPerCard?: number
     autoOrganizeGcis?: boolean
     mainCharacter?: number
+    includeArchive?: boolean
   }) => ipcRenderer.invoke('memcard:mergeUserSettings', partial),
+  getPlaylistView: () => ipcRenderer.invoke('memcard:getPlaylistView'),
+  setActivePlaylist: (id: string) => ipcRenderer.invoke('memcard:setActivePlaylist', id),
+  savePlaylist: (p: unknown) => ipcRenderer.invoke('memcard:savePlaylist', p),
+  deletePlaylist: (id: string) => ipcRenderer.invoke('memcard:deletePlaylist', id),
+  onPlaylistsChanged: (callback: () => void) => {
+    const listener = () => callback()
+    ipcRenderer.on('memcard:playlists-changed', listener)
+    return () => ipcRenderer.removeListener('memcard:playlists-changed', listener)
+  },
   pickDirectory: (defaultPath?: string | null) =>
     ipcRenderer.invoke('memcard:pickDirectory', defaultPath),
   pickFile: (filters?: { name: string; extensions: string[] }[]) =>

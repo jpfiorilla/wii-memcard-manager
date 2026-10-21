@@ -1,13 +1,14 @@
 import './threadpool'
 import fs from 'node:fs'
-import { app, BrowserWindow, screen, shell, ipcMain, Tray, Menu } from 'electron'
+import { app, BrowserWindow, screen, shell, ipcMain, Tray, Menu, nativeImage, type MenuItemConstructorOptions } from 'electron'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
 import { update } from './update'
 import { installConsoleLogging, log, logFilePath } from './log'
-import { registerMemcardIpc, resumeMemcardSession } from './memcard'
+import { onPlaylistsChanged, registerMemcardIpc, resumeMemcardSession, setActivePlaylist, trayPlaylists } from './memcard'
+import { CKIND_ICON_SLUGS } from './gcmemcard/tmceExportHeader'
 import { createAppWindowIcon, createTrayMenuBarImage } from './trayIcon'
 
 const require = createRequire(import.meta.url)
@@ -161,11 +162,36 @@ app.whenReady().then(async () => {
         void createWindow()
       }
     }
-    const buildTrayMenu = () =>
-      Menu.buildFromTemplate([
+    const buildTrayMenu = async (withPlaylists: boolean) => {
+      let playlists: Awaited<ReturnType<typeof trayPlaylists>> = []
+      if (withPlaylists) {
+        try {
+          playlists = await trayPlaylists()
+        } catch (e) {
+          log.warn('[tray] could not list playlists', e)
+        }
+      }
+      const playlistItems: MenuItemConstructorOptions[] = playlists.length
+        ? [
+            { label: 'Put on the card', enabled: false },
+            ...playlists.map(
+              (p): MenuItemConstructorOptions => ({
+                label: p.name,
+                type: 'radio',
+                checked: p.checked,
+                icon: characterMenuIcon(p.opponent),
+                click: () => void setActivePlaylist(p.id),
+              }),
+            ),
+            { label: 'More playlists…', click: () => showMainWindow() },
+            { type: 'separator' },
+          ]
+        : []
+      return Menu.buildFromTemplate([
         { label: 'Show', click: () => showMainWindow() },
-        { label: 'Open Log', click: () => void shell.openPath(logFilePath()) },
         { type: 'separator' },
+        ...playlistItems,
+        { label: 'Open Log', click: () => void shell.openPath(logFilePath()) },
         {
           label: 'Open at Login',
           type: 'checkbox',
@@ -173,15 +199,31 @@ app.whenReady().then(async () => {
           enabled: app.isPackaged,
           click: (item) => {
             app.setLoginItemSettings({ openAtLogin: item.checked })
-            tray?.setContextMenu(buildTrayMenu())
+            void refreshTray()
           },
         },
         { type: 'separator' },
         { label: 'Quit', click: () => app.quit() },
       ])
-    tray.setContextMenu(buildTrayMenu())
+    }
+    const refreshTray = async () => {
+      const menu = await buildTrayMenu(true)
+      tray?.setContextMenu(menu)
+    }
+    tray.setContextMenu(await buildTrayMenu(false))
+    void refreshTray()
+    onPlaylistsChanged(() => void refreshTray())
   }
 })
+
+/** 16-pt stock icon for a matchup playlist in the menu bar menu. */
+function characterMenuIcon(ckind: number | undefined) {
+  if (ckind === undefined || !process.env.VITE_PUBLIC) return undefined
+  const slug = CKIND_ICON_SLUGS[ckind]
+  if (!slug) return undefined
+  const img = nativeImage.createFromPath(path.join(process.env.VITE_PUBLIC, 'charactericons', slug, '0.png'))
+  return img.isEmpty() ? undefined : img.resize({ width: 16, height: 16 })
+}
 
 /** Leave the Dock; retried once because macOS sometimes ignores hide() while the app is frontmost. */
 function hideFromDock() {

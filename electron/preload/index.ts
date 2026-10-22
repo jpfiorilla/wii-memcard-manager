@@ -8,6 +8,7 @@ type GciFolderEntry = {
   parseError: string | null
   blockCount: number
   mtimeMs: number
+  tmce?: { hmn: number; hmnCostume: number; cpu: number; cpuCostume: number; name: string } | null
 }
 
 type GciFolderScanCardStats = {
@@ -48,6 +49,7 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
 
 contextBridge.exposeInMainWorld('memcard', {
   getUserSettings: () => ipcRenderer.invoke('memcard:getUserSettings'),
+  resolveTargetCard: () => ipcRenderer.invoke('memcard:resolveTargetCard'),
   mergeUserSettings: (partial: {
     gciFolder?: string | null
     rawPath?: string | null
@@ -63,7 +65,22 @@ contextBridge.exposeInMainWorld('memcard', {
     gciFilenameSanitize?: 'none' | 'ascii-title' | 'ascii-upper' | 'ascii-lower' | 'tmce-short'
     notificationsEnabled?: boolean
     gciPathOverrides?: Record<string, 'neutral' | 'exclude' | 'include'>
+    wiiSyncEnabled?: boolean
+    wiiSyncPort?: number
+    maxReplaysPerCard?: number
+    autoOrganizeGcis?: boolean
+    mainCharacter?: number
+    includeArchive?: boolean
   }) => ipcRenderer.invoke('memcard:mergeUserSettings', partial),
+  getPlaylistView: () => ipcRenderer.invoke('memcard:getPlaylistView'),
+  setActivePlaylist: (id: string) => ipcRenderer.invoke('memcard:setActivePlaylist', id),
+  savePlaylist: (p: unknown) => ipcRenderer.invoke('memcard:savePlaylist', p),
+  deletePlaylist: (id: string) => ipcRenderer.invoke('memcard:deletePlaylist', id),
+  onPlaylistsChanged: (callback: () => void) => {
+    const listener = () => callback()
+    ipcRenderer.on('memcard:playlists-changed', listener)
+    return () => ipcRenderer.removeListener('memcard:playlists-changed', listener)
+  },
   pickDirectory: (defaultPath?: string | null) =>
     ipcRenderer.invoke('memcard:pickDirectory', defaultPath),
   pickFile: (filters?: { name: string; extensions: string[] }[]) =>
@@ -77,7 +94,7 @@ contextBridge.exposeInMainWorld('memcard', {
     >,
   scanGciFolder: (args: { rawPath: string; gciFolder: string }) =>
     ipcRenderer.invoke('memcard:scanGciFolder', args) as Promise<
-      | { ok: true; entries: GciFolderEntry[]; cardStats: GciFolderScanCardStats }
+      | { ok: true; entries: GciFolderEntry[]; cardStats: GciFolderScanCardStats | null; cardError?: string }
       | { ok: false; error: string }
     >,
   importGcis: (rawPath: string, gciPaths: string[]) =>
@@ -138,6 +155,17 @@ contextBridge.exposeInMainWorld('memcard', {
       callback(data)
     ipcRenderer.on('memcard:sd-transfer-error', listener)
     return () => ipcRenderer.removeListener('memcard:sd-transfer-error', listener)
+  },
+  getWiiSyncStatus: () => ipcRenderer.invoke('memcard:getWiiSyncStatus'),
+  onWiiSyncStatus: (callback: (data: unknown) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data)
+    ipcRenderer.on('memcard:wii-sync-status', listener)
+    return () => ipcRenderer.removeListener('memcard:wii-sync-status', listener)
+  },
+  onWiiSyncDelivered: (callback: (data: unknown) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data)
+    ipcRenderer.on('memcard:wii-sync-delivered', listener)
+    return () => ipcRenderer.removeListener('memcard:wii-sync-delivered', listener)
   },
 })
 

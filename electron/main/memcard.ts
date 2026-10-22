@@ -1,4 +1,5 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { log } from './log'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import chokidar, { type FSWatcher } from 'chokidar'
@@ -10,12 +11,31 @@ import {
   scanGciFolderAgainstRaw,
   syncFolderSelectionToRaw,
 } from './gcmemcard'
-import { runGciBatchBuild } from './gciBatchPipeline'
+import { BUILD_GAMES, CARD_SIZE_MB, batchStep, resolveStagingDir, runGciBatchBuild } from './gciBatchPipeline'
+import { captureHeadersFromSavesDir, patchCardFile } from './cardHeaders'
+import { pointTmSyncAtThisMac } from './tmSyncConfig'
+import { syncTmSyncOnCard } from './tmSyncInstall'
 import { mergeUserSettings, readUserSettings, type MemcardUserSettings } from './userSettings'
 import { peekPendingSdAll, removePendingByLocalPath } from './pendingSdQueue'
 import { showMemcardNotification } from './notifications'
 import { copyLocalRawToSdSaves, isPathInsideRoot } from './sdTransfer'
 import { startVolumeWatcherMacos, stopVolumeWatcher } from './volumeWatcher'
+import { getWiiSyncStatus, onCardDelivered, reconfigureWiiSync } from './wiiSync'
+import { EventEmitter } from 'node:events'
+import { randomUUID } from 'node:crypto'
+import { scanLibrary } from './recordingLibrary'
+import {
+  DEFAULT_PLAYLIST,
+  playlistName,
+  playlistShuffles,
+  resolvePlaylistId,
+  sanitizeCustomPlaylist,
+  selectRecordings,
+  summarizePlaylists,
+  type CustomPlaylist,
+  type PlaylistSummary,
+} from './playlists'
+import { ckindName } from './gcmemcard/tmceExportHeader'
 
 export type MemcardFolderEvent = {
   rootDir: string
@@ -32,7 +52,18 @@ let batchBuildRunning = false
 /** When a folder event fires while a batch is in progress, we coalesce into one rerun after it finishes. */
 const pendingBatchRoots = new Set<string>()
 
+/** Renderer events that are worth keeping in the log file (everything except UI chatter). */
+const LOGGED_CHANNELS = /batch-built|batch-build-error|sd-transfer|wii-sync-(request|delivered)/
+
 function broadcast(channel: string, payload: unknown) {
+  const quiet =
+    channel === 'memcard:batch-built' &&
+    (payload as { outputs?: unknown[]; errors?: unknown[] })?.outputs?.length === 0 &&
+    (payload as { errors?: unknown[] })?.errors?.length === 0
+  if (LOGGED_CHANNELS.test(channel) && !quiet) {
+    const isError = /error/.test(channel)
+    ;(isError ? log.warn : log.info)(`[${channel.replace('memcard:', '')}]`, payload)
+  }
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send(channel, payload)
   }
@@ -50,10 +81,17 @@ function debouncedEmitFolder(rootDir: string, payload: MemcardFolderEvent) {
   )
 }
 
+let loggedAutoBatchSkip = false
 function scheduleAutoBatch(rootDir: string) {
   void (async () => {
     const s = await readUserSettings()
-    if (!s.autoBuildRaw || s.gciFolder !== rootDir) return
+    if (!s.autoBuildRaw || s.gciFolder !== rootDir) {
+      if (!loggedAutoBatchSkip) {
+        loggedAutoBatchSkip = true
+        log.warn(`[batch] not building: autoBuildRaw=${s.autoBuildRaw}, watched=${rootDir}, settings folder=${s.gciFolder}`)
+      }
+      return
+    }
     const prev = batchBuildTimers.get(rootDir)
     if (prev) clearTimeout(prev)
     const ms = Math.max(500, s.gciBatchDebounceMs)
@@ -76,16 +114,28 @@ async function runBatchAndNotify(rootDir: string) {
   if (s.gciFolder !== rootDir || !s.autoBuildRaw) return
 
   batchBuildRunning = true
+  const startedAt = Date.now()
+  const watchdog = setInterval(() => {
+    log.warn(`[batch] still running after ${Math.round((Date.now() - startedAt) / 1000)} s; current step: ${batchStep}`)
+  }, 60_000)
   try {
     const r = await runGciBatchBuild(s)
+    if (r.ok && r.organized?.length) {
+      log.info(`[organize] moved ${r.organized.length} older recordings:`)
+      for (const m of r.organized) log.info(`  ${path.basename(m.from)} -> ${m.opponent}/`)
+    }
     if (!r.ok) {
       broadcast('memcard:batch-build-error', { error: r.error })
       return
     }
     broadcast('memcard:batch-built', { outputs: r.outputs, errors: r.errors })
+    if (r.outputs.length || r.organized?.length) playlistsChanged()
     await processPendingSdOnAllVolumes({ notifyEachCopy: false })
     await notifyAfterBatchPipelineMacos(r.outputs, r.errors)
+  } catch (e) {
+    log.error('[batch] build failed', e)
   } finally {
+    clearInterval(watchdog)
     batchBuildRunning = false
     const hadPending = pendingBatchRoots.size > 0
     pendingBatchRoots.clear()
@@ -151,10 +201,10 @@ async function processSdTransfersForSavesDir(
 }
 
 /** Copy pending staging .raw files to any mounted SD that exposes `nintendont/saves` (or configured path). */
+const loggedTmSyncSkips = new Set<string>()
 async function processPendingSdOnAllVolumes(opts?: { notifyEachCopy?: boolean }) {
   if (process.platform !== 'darwin') return
   const s = await readUserSettings()
-  if (!s.autoCopyToSd) return
   const names = await fs.readdir('/Volumes').catch(() => [])
   for (const name of names) {
     if (name.startsWith('.')) continue
@@ -167,6 +217,34 @@ async function processPendingSdOnAllVolumes(opts?: { notifyEachCopy?: boolean })
       continue
     }
     if (!isPathInsideRoot(mountPath, savesDir)) continue
+    // Install / update TM Sync on this card from the copy bundled in the app, then point it at
+    // this Mac (no IP addresses to type in).
+    if (s.wiiSyncEnabled) {
+      try {
+        const r = await syncTmSyncOnCard(mountPath)
+        if (r.action === 'installed' || r.action === 'updated') {
+          const what = r.action === 'installed' ? `installed TM Sync ${r.version}` : `updated TM Sync ${r.from} -> ${r.version}`
+          log.info(`[tm-sync-install] ${mountPath}: ${what}`)
+          void showMemcardNotification('TM Sync', `${what} on ${path.basename(mountPath)}. Launch it from the Homebrew Channel.`)
+        } else if (r.action === 'skipped' && !loggedTmSyncSkips.has(`${mountPath}:${r.reason}`)) {
+          loggedTmSyncSkips.add(`${mountPath}:${r.reason}`)
+          log.info(`[tm-sync-install] ${mountPath}: skipped (${r.reason})`)
+        }
+      } catch (e) {
+        log.warn('[tm-sync-install] could not install TM Sync', e)
+      }
+      try {
+        await pointTmSyncAtThisMac(mountPath, s.wiiSyncPort)
+      } catch (e) {
+        log.warn('[tm-sync-config] could not update config.ini', e)
+      }
+    }
+    // Learn the Wii card's header (serial) so built cards mount as this console's card.
+    const captured = await captureHeadersFromSavesDir(savesDir, BUILD_GAMES, CARD_SIZE_MB)
+    for (const game of captured) {
+      await patchCardFile(game, path.join(resolveStagingDir(s), `${game}.raw`))
+    }
+    if (!s.autoCopyToSd) continue
     await processSdTransfersForSavesDir(savesDir, s, opts)
   }
 }
@@ -277,15 +355,49 @@ export async function startFolderWatch(rootDir: string): Promise<{ ok: true } | 
     scheduleAutoBatch(rootDir)
   })
   watchers.set(rootDir, w)
+  log.info(`[watch] watching ${rootDir}`)
+  // Pick up anything that arrived while the app wasn't running.
+  scheduleAutoBatch(rootDir)
+  ensurePeriodicRecheck()
   return { ok: true }
+}
+
+/**
+ * File events from cloud-synced folders (Google Drive) aren't always delivered, so also re-check
+ * the watched folder every minute. It's a stat-only pass unless something is actually new.
+ */
+const RECHECK_MS = 60_000
+let recheckTimer: ReturnType<typeof setInterval> | null = null
+function ensurePeriodicRecheck() {
+  if (recheckTimer) return
+  recheckTimer = setInterval(() => {
+    for (const rootDir of watchers.keys()) scheduleAutoBatch(rootDir)
+  }, RECHECK_MS)
 }
 
 export async function resumeMemcardSession() {
   const s = await readUserSettings()
+  log.info('[settings]', {
+    gciFolder: s.gciFolder,
+    rawPath: s.rawPath,
+    folderWatchEnabled: s.folderWatchEnabled,
+    autoBuildRaw: s.autoBuildRaw,
+    stagingDir: s.stagingDir,
+    maxReplaysPerCard: s.maxReplaysPerCard,
+    autoOrganizeGcis: s.autoOrganizeGcis,
+    mainCharacter: s.mainCharacter,
+    wiiSyncEnabled: s.wiiSyncEnabled,
+    wiiSyncPort: s.wiiSyncPort,
+    activePlaylist: s.activePlaylist,
+    customPlaylists: s.customPlaylists.length,
+    includeArchive: s.includeArchive,
+  })
+  registerReshuffleOnSync()
   if (s.gciFolder && s.folderWatchEnabled) {
     await startFolderWatch(s.gciFolder)
   }
   reconfigureVolumeWatcher()
+  await reconfigureWiiSync(broadcast)
   await processPendingSdOnAllVolumes()
 }
 
@@ -312,7 +424,139 @@ export async function backupRawBeforeWrite(
   }
 }
 
+// ---------------------------------------------------------------- playlists
+
+export type PlaylistView = {
+  folder: string | null
+  active: string
+  activeName: string
+  shuffles: boolean
+  playlists: PlaylistSummary[]
+  /** Recordings the active playlist puts on the card, in card order. */
+  card: { path: string; name: string; opponent: number | null }[]
+  gameSaves: number
+  recordingCount: number
+  archiveCount: number
+  includeArchive: boolean
+  cap: number
+}
+
+const playlistEvents = new EventEmitter()
+/** The tray menu listens so its checkmark follows changes made in the window (and vice versa). */
+export function onPlaylistsChanged(fn: () => void): void {
+  playlistEvents.on('changed', fn)
+}
+function playlistsChanged() {
+  playlistEvents.emit('changed')
+  broadcast('memcard:playlists-changed', {})
+}
+
+async function rebuildNow() {
+  const s = await readUserSettings()
+  if (s.gciFolder) await runBatchAndNotify(s.gciFolder)
+}
+
+export async function getPlaylistView(): Promise<PlaylistView> {
+  const s = await readUserSettings()
+  const cap = Math.max(1, s.maxReplaysPerCard)
+  const active = resolvePlaylistId(s.activePlaylist, s.customPlaylists)
+  const base = {
+    folder: s.gciFolder,
+    active,
+    activeName: playlistName(active, s.customPlaylists, ckindName),
+    shuffles: playlistShuffles(active, s.customPlaylists),
+    includeArchive: s.includeArchive,
+    cap,
+  }
+  if (!s.gciFolder) {
+    return { ...base, playlists: summarizePlaylists([], s.customPlaylists, cap, ckindName), card: [], gameSaves: 0, recordingCount: 0, archiveCount: 0 }
+  }
+  const lib = await scanLibrary(s.gciFolder, {
+    includeArchive: s.includeArchive,
+    mainCharacter: s.mainCharacter,
+    gameCode: 'GTME',
+  })
+  const picked = selectRecordings(lib.recordings, active, s.customPlaylists, cap, s.shuffleSeed)
+  return {
+    ...base,
+    playlists: summarizePlaylists(lib.recordings, s.customPlaylists, cap, ckindName),
+    card: picked.map((r) => ({ path: r.path, name: r.name, opponent: r.opponent })),
+    gameSaves: lib.gameSaves.length,
+    recordingCount: lib.recordings.length,
+    archiveCount: lib.archiveCount,
+  }
+}
+
+export async function setActivePlaylist(id: string): Promise<void> {
+  const s = await readUserSettings()
+  const resolved = resolvePlaylistId(id, s.customPlaylists)
+  log.info(`[playlist] now "${playlistName(resolved, s.customPlaylists, ckindName)}" (${resolved})`)
+  await mergeUserSettings({ activePlaylist: resolved })
+  playlistsChanged()
+  void rebuildNow()
+}
+
+export async function savePlaylist(raw: Partial<CustomPlaylist>): Promise<{ ok: true; playlist: CustomPlaylist } | { ok: false; error: string }> {
+  const s = await readUserSettings()
+  const p = sanitizeCustomPlaylist({ ...raw, id: raw.id || `yours:${randomUUID().slice(0, 8)}` })
+  if (!p) return { ok: false, error: 'A playlist needs a name.' }
+  const exists = s.customPlaylists.some((c) => c.id === p.id)
+  const customPlaylists = exists ? s.customPlaylists.map((c) => (c.id === p.id ? p : c)) : [...s.customPlaylists, p]
+  await mergeUserSettings({ customPlaylists })
+  log.info(`[playlist] ${exists ? 'updated' : 'created'} "${p.name}" (${p.id})`, p)
+  playlistsChanged()
+  if (s.activePlaylist === p.id) void rebuildNow()
+  return { ok: true, playlist: p }
+}
+
+export async function deletePlaylist(id: string): Promise<void> {
+  const s = await readUserSettings()
+  const wasActive = s.activePlaylist === id
+  await mergeUserSettings({
+    customPlaylists: s.customPlaylists.filter((c) => c.id !== id),
+    ...(wasActive ? { activePlaylist: DEFAULT_PLAYLIST } : {}),
+  })
+  log.info(`[playlist] deleted ${id}${wasActive ? '; back to Latest' : ''}`)
+  playlistsChanged()
+  if (wasActive) void rebuildNow()
+}
+
+/** Short list for the menu bar: Recent, the three biggest matchups, Yours, and the active one. */
+export async function trayPlaylists(): Promise<{ id: string; name: string; opponent?: number; checked: boolean }[]> {
+  const v = await getPlaylistView()
+  const recent = v.playlists.filter((p) => p.group === 'recent')
+  const matchups = v.playlists.filter((p) => p.group === 'matchup').slice(0, 3)
+  const yours = v.playlists.filter((p) => p.group === 'yours')
+  const list = [...recent, ...matchups, ...yours]
+  if (!list.some((p) => p.id === v.active)) {
+    const a = v.playlists.find((p) => p.id === v.active)
+    if (a) list.push(a)
+  }
+  return list.map((p) => ({ id: p.id, name: p.name, opponent: p.opponent, checked: p.id === v.active }))
+}
+
+let reshuffleRegistered = false
+function registerReshuffleOnSync() {
+  if (reshuffleRegistered) return
+  reshuffleRegistered = true
+  onCardDelivered(() => {
+    void (async () => {
+      const s = await readUserSettings()
+      if (!playlistShuffles(s.activePlaylist, s.customPlaylists)) return
+      await mergeUserSettings({ shuffleSeed: s.shuffleSeed + 1 })
+      log.info('[playlist] Wii synced a shuffled card; building a new mix for next time')
+      playlistsChanged()
+      await rebuildNow()
+    })()
+  })
+}
+
 export function registerMemcardIpc() {
+  ipcMain.handle('memcard:getPlaylistView', async () => getPlaylistView())
+  ipcMain.handle('memcard:setActivePlaylist', async (_e, id: string) => setActivePlaylist(id))
+  ipcMain.handle('memcard:savePlaylist', async (_e, p: Partial<CustomPlaylist>) => savePlaylist(p))
+  ipcMain.handle('memcard:deletePlaylist', async (_e, id: string) => deletePlaylist(id))
+
   ipcMain.handle('memcard:pickDirectory', async (event, defaultPath?: string | null) => {
     const win =
       BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow()
@@ -362,9 +606,35 @@ export function registerMemcardIpc() {
 
   ipcMain.handle('memcard:getUserSettings', async () => readUserSettings())
 
+  // The card the window compares against: the user's pick if it exists, else the auto-built one.
+  ipcMain.handle('memcard:resolveTargetCard', async () => {
+    const s = await readUserSettings()
+    const staged = path.join(resolveStagingDir(s), 'GTME.raw')
+    if (s.rawPath && s.rawPath !== staged) {
+      const ok = await fs.stat(s.rawPath).then((st) => st.isFile()).catch(() => false)
+      if (ok) return { path: s.rawPath, auto: false }
+      log.info(`[target] saved card ${s.rawPath} is missing; using auto-built ${staged}`)
+    }
+    return { path: staged, auto: true }
+  })
+
+  ipcMain.handle('memcard:getWiiSyncStatus', async () => getWiiSyncStatus())
+
   ipcMain.handle('memcard:mergeUserSettings', async (_event, partial: Partial<MemcardUserSettings>) => {
     const next = await mergeUserSettings(partial)
     reconfigureVolumeWatcher()
+    if (partial.wiiSyncEnabled !== undefined || partial.wiiSyncPort !== undefined) {
+      await reconfigureWiiSync(broadcast)
+    }
+    if (
+      partial.includeArchive !== undefined ||
+      partial.maxReplaysPerCard !== undefined ||
+      partial.mainCharacter !== undefined ||
+      partial.gciFolder !== undefined
+    ) {
+      playlistsChanged()
+      void rebuildNow()
+    }
     await processPendingSdOnAllVolumes()
     return next
   })

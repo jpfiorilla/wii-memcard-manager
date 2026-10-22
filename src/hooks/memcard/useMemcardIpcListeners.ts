@@ -51,7 +51,16 @@ export function useMemcardIpcListeners(enqueueSnackbar: Enqueue) {
         variant: "error",
       });
     });
+    const u7 = window.memcard.onWiiSyncDelivered(async ({ fileName, remoteAddress, bytes }) => {
+      const s = await window.memcard.getUserSettings();
+      if (!s.notificationsEnabled) return;
+      const who = remoteAddress?.replace(/^::ffff:/, "") ?? "Wii";
+      enqueueSnackbar(`Wii (${who}) pulled ${fileName} — ${Math.round(bytes / 1024)} KB`, {
+        variant: "success",
+      });
+    });
     return () => {
+      u7();
       u1();
       u2();
       u3();

@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { app } from 'electron'
+import { DEFAULT_PLAYLIST, sanitizeCustomPlaylist, type CustomPlaylist } from './playlists'
 
 export type GciPathOverride = 'neutral' | 'exclude' | 'include'
 
@@ -31,6 +32,24 @@ export type MemcardUserSettings = {
   notificationsEnabled: boolean
   /** Absolute .gci paths → override (omit key = neutral automatic behavior). */
   gciPathOverrides: Record<string, GciPathOverride>
+  /** Serve staged .raw images to the Wii "TM Sync" app over the LAN. */
+  wiiSyncEnabled: boolean
+  /** HTTP port for TM Sync (UDP discovery is always 8643). */
+  wiiSyncPort: number
+  /** Newest root recordings that go on the built card (keeps TM:CE from running out of space). */
+  maxReplaysPerCard: number
+  /** After a build, file older root TM:CE recordings into opponent folders (e.g. `Falco/`). */
+  autoOrganizeGcis: boolean
+  /** Melee external character ID (CKIND) you play; its opponent names the folder. 9 = Marth. */
+  mainCharacter: number
+  /** Playlist that decides what goes on the card (`latest`, `matchup:20`, `yours:…`). */
+  activePlaylist: string
+  /** Playlists the user made. */
+  customPlaylists: CustomPlaylist[]
+  /** Also draw recordings from the folder's `archive/` subfolder. */
+  includeArchive: boolean
+  /** Seed for shuffling playlists; bumped after each Wii sync for a new mix. */
+  shuffleSeed: number
 }
 
 function sanitizeGciPathOverrides(
@@ -49,6 +68,10 @@ function sanitizeGciPathOverrides(
   return out
 }
 
+function isValidPort(n: unknown): n is number {
+  return typeof n === 'number' && Number.isInteger(n) && n >= 1024 && n <= 65535
+}
+
 const defaults: MemcardUserSettings = {
   gciFolder: null,
   rawPath: null,
@@ -64,6 +87,15 @@ const defaults: MemcardUserSettings = {
   gciFilenameSanitize: 'none',
   notificationsEnabled: true,
   gciPathOverrides: {},
+  wiiSyncEnabled: true,
+  wiiSyncPort: 8642,
+  maxReplaysPerCard: 25,
+  autoOrganizeGcis: true,
+  mainCharacter: 9,
+  activePlaylist: DEFAULT_PLAYLIST,
+  customPlaylists: [],
+  includeArchive: false,
+  shuffleSeed: 1,
 }
 
 function filePath(): string {
@@ -96,6 +128,17 @@ function merge(a: MemcardUserSettings, partial: Partial<MemcardUserSettings>): M
       partial.notificationsEnabled !== undefined ? partial.notificationsEnabled : a.notificationsEnabled,
     gciPathOverrides:
       partial.gciPathOverrides !== undefined ? partial.gciPathOverrides : a.gciPathOverrides,
+    wiiSyncEnabled: partial.wiiSyncEnabled !== undefined ? partial.wiiSyncEnabled : a.wiiSyncEnabled,
+    wiiSyncPort: partial.wiiSyncPort !== undefined ? partial.wiiSyncPort : a.wiiSyncPort,
+    maxReplaysPerCard:
+      partial.maxReplaysPerCard !== undefined ? partial.maxReplaysPerCard : a.maxReplaysPerCard,
+    autoOrganizeGcis:
+      partial.autoOrganizeGcis !== undefined ? partial.autoOrganizeGcis : a.autoOrganizeGcis,
+    mainCharacter: partial.mainCharacter !== undefined ? partial.mainCharacter : a.mainCharacter,
+    activePlaylist: partial.activePlaylist !== undefined ? partial.activePlaylist : a.activePlaylist,
+    customPlaylists: partial.customPlaylists !== undefined ? partial.customPlaylists : a.customPlaylists,
+    includeArchive: partial.includeArchive !== undefined ? partial.includeArchive : a.includeArchive,
+    shuffleSeed: partial.shuffleSeed !== undefined ? partial.shuffleSeed : a.shuffleSeed,
   }
 }
 
@@ -134,6 +177,35 @@ export async function readUserSettings(): Promise<MemcardUserSettings> {
       notificationsEnabled:
         typeof parsed.notificationsEnabled === 'boolean' ? parsed.notificationsEnabled : defaults.notificationsEnabled,
       gciPathOverrides: sanitizeGciPathOverrides(parsed.gciPathOverrides),
+      wiiSyncEnabled:
+        typeof parsed.wiiSyncEnabled === 'boolean' ? parsed.wiiSyncEnabled : defaults.wiiSyncEnabled,
+      wiiSyncPort: isValidPort(parsed.wiiSyncPort) ? parsed.wiiSyncPort : defaults.wiiSyncPort,
+      maxReplaysPerCard:
+        typeof parsed.maxReplaysPerCard === 'number' &&
+        Number.isInteger(parsed.maxReplaysPerCard) &&
+        parsed.maxReplaysPerCard >= 1 &&
+        parsed.maxReplaysPerCard <= 60
+          ? parsed.maxReplaysPerCard
+          : defaults.maxReplaysPerCard,
+      autoOrganizeGcis:
+        typeof parsed.autoOrganizeGcis === 'boolean' ? parsed.autoOrganizeGcis : defaults.autoOrganizeGcis,
+      mainCharacter:
+        typeof parsed.mainCharacter === 'number' &&
+        Number.isInteger(parsed.mainCharacter) &&
+        parsed.mainCharacter >= 0 &&
+        parsed.mainCharacter <= 25
+          ? parsed.mainCharacter
+          : defaults.mainCharacter,
+      activePlaylist:
+        typeof parsed.activePlaylist === 'string' && parsed.activePlaylist.length > 0
+          ? parsed.activePlaylist
+          : defaults.activePlaylist,
+      customPlaylists: Array.isArray(parsed.customPlaylists)
+        ? parsed.customPlaylists.map(sanitizeCustomPlaylist).filter((p): p is CustomPlaylist => p !== null)
+        : [],
+      includeArchive: typeof parsed.includeArchive === 'boolean' ? parsed.includeArchive : defaults.includeArchive,
+      shuffleSeed:
+        typeof parsed.shuffleSeed === 'number' && Number.isInteger(parsed.shuffleSeed) ? parsed.shuffleSeed : defaults.shuffleSeed,
     })
   } catch {
     return { ...defaults }

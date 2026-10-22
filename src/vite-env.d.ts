@@ -23,7 +23,77 @@ export type MemcardUserSettings = {
   gciFilenameSanitize: 'none' | 'ascii-title' | 'ascii-upper' | 'ascii-lower' | 'tmce-short'
   notificationsEnabled: boolean
   gciPathOverrides: Record<string, GciPathOverride>
+  wiiSyncEnabled: boolean
+  wiiSyncPort: number
+  maxReplaysPerCard: number
+  autoOrganizeGcis: boolean
+  mainCharacter: number
+  activePlaylist: string
+  customPlaylists: CustomPlaylist[]
+  includeArchive: boolean
+  shuffleSeed: number
 }
+
+export type PlaylistOrder = 'newest' | 'shuffle'
+
+export type CustomPlaylist = {
+  id: string
+  name: string
+  /** Opponent character ids (Melee CKIND); empty = any matchup. */
+  matchups: number[]
+  order: PlaylistOrder
+  count: number
+}
+
+export type PlaylistSummary = {
+  id: string
+  name: string
+  group: 'recent' | 'matchup' | 'yours'
+  description: string
+  opponent?: number
+  available: number
+  shuffles: boolean
+}
+
+export type PlaylistView = {
+  folder: string | null
+  active: string
+  activeName: string
+  shuffles: boolean
+  playlists: PlaylistSummary[]
+  card: { path: string; name: string; opponent: number | null }[]
+  gameSaves: number
+  recordingCount: number
+  archiveCount: number
+  includeArchive: boolean
+  cap: number
+}
+
+export type WiiSyncRequestLog = {
+  at: number
+  remoteAddress: string | undefined
+  fileName: string
+  status: number
+}
+
+export type WiiSyncStatus = {
+  enabled: boolean
+  running: boolean
+  port: number | null
+  discovery: boolean
+  addresses: string[]
+  error: string | null
+  lastRequest: WiiSyncRequestLog | null
+}
+
+export type WiiSyncDelivery = {
+  fileName: string
+  localPath: string
+  etag: string
+  bytes: number
+  remoteAddress: string | undefined
+}
+
 
 export type GciDentryDescription = {
   gameCode: string
@@ -51,6 +121,15 @@ export type GciFolderEntry = {
 
 export type MemcardApi = {
   getUserSettings: () => Promise<MemcardUserSettings>
+  getPlaylistView: () => Promise<PlaylistView>
+  setActivePlaylist: (id: string) => Promise<void>
+  savePlaylist: (
+    p: Omit<CustomPlaylist, 'id'> & { id?: string },
+  ) => Promise<{ ok: true; playlist: CustomPlaylist } | { ok: false; error: string }>
+  deletePlaylist: (id: string) => Promise<void>
+  onPlaylistsChanged: (callback: () => void) => () => void
+  /** Saved .raw if it exists, else the auto-built staged GTME.raw. */
+  resolveTargetCard: () => Promise<{ path: string; auto: boolean }>
   mergeUserSettings: (partial: Partial<MemcardUserSettings>) => Promise<MemcardUserSettings>
   pickDirectory: (defaultPath?: string | null) => Promise<string | null>
   pickFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>
@@ -64,7 +143,7 @@ export type MemcardApi = {
     rawPath: string
     gciFolder: string
   }) => Promise<
-    | { ok: true; entries: GciFolderEntry[]; cardStats: GciFolderScanCardStats }
+    | { ok: true; entries: GciFolderEntry[]; cardStats: GciFolderScanCardStats | null; cardError?: string }
     | { ok: false; error: string }
   >
   importGcis: (rawPath: string, gciPaths: string[]) => Promise<{ ok: true } | { ok: false; error: string }>
@@ -84,6 +163,9 @@ export type MemcardApi = {
   onVolumeUnmounted: (callback: (data: { mountPath: string }) => void) => () => void
   onSdTransferDone: (callback: (data: { destPath: string; localPath: string }) => void) => () => void
   onSdTransferError: (callback: (data: { error: string; localPath: string }) => void) => () => void
+  getWiiSyncStatus: () => Promise<WiiSyncStatus>
+  onWiiSyncStatus: (callback: (data: WiiSyncStatus) => void) => () => void
+  onWiiSyncDelivered: (callback: (data: WiiSyncDelivery) => void) => () => void
 }
 
 declare global {

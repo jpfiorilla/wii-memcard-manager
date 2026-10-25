@@ -7,6 +7,8 @@ name: Build release binaries
 on:
   workflow_dispatch:
   push:
+    # main: build-check the Mac/Windows app with TM Sync bundled; tags also publish the release.
+    branches: [main]
     tags:
       - "v*"
 

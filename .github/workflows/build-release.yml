@@ -1,5 +1,9 @@
 name: Build release binaries
 
+# One release = one version for both halves: the Mac/Windows app and TM Sync (Wii homebrew).
+# TM Sync is built first and bundled inside the app (which installs it onto Wii SD cards); the
+# SD-ready tm-sync-<version>.zip is also attached to the release for manual installs.
+
 on:
   workflow_dispatch:
   push:
@@ -10,7 +14,33 @@ permissions:
   contents: write
 
 jobs:
+  tm-sync:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitppc:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag matches package.json and TM Sync versions
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          app=$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' package.json | head -1)
+          wii=$(sed -n 's/.*TMSYNC_VERSION "\([^"]*\)".*/\1/p' tm-sync/source/version.h)
+          tag="${GITHUB_REF_NAME#v}"
+          echo "tag=$tag app=$app tm-sync=$wii"
+          test "$tag" = "$app" && test "$tag" = "$wii"
+
+      - name: Build TM Sync
+        run: make -C tm-sync package
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tm-sync-dist
+          path: tm-sync/dist/
+          if-no-files-found: error
+
   build:
+    needs: tm-sync
     strategy:
       fail-fast: false
       matrix:
@@ -18,6 +48,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tm-sync-dist
+          path: tm-sync/dist
 
       - uses: actions/setup-node@v4
         with:
@@ -28,16 +63,16 @@ jobs:
 
       - run: npm test -- --run
 
-      - name: Electron build (unsigned mac / Windows installer)
+      - name: Electron build (bundles TM Sync; unsigned mac / Windows installer)
         run: npm run build
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      - name: Collect installers (DMG / NSIS only)
+      - name: Collect installers (mac zip / Windows NSIS)
         shell: bash
         run: |
           mkdir -p installers
-          find release -name 'Wii Memcard Manager_*.dmg' -exec cp {} installers/ \;
+          find release -name 'Wii Memcard Manager_*.zip' -exec cp {} installers/ \;
           find release -name 'Wii Memcard Manager_*.exe' -exec cp {} installers/ \;
           find installers -type f | sort
 
@@ -48,16 +83,25 @@ jobs:
           if-no-files-found: error
 
   publish-to-release:
-    needs: build
+    needs: [tm-sync, build]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
+          pattern: installers-*
           path: assets
           merge-multiple: true
 
-      - name: List downloaded files
+      - uses: actions/download-artifact@v4
+        with:
+          name: tm-sync-dist
+          path: tm-sync-dist
+
+      - name: Zip TM Sync for the SD card
+        run: cd tm-sync-dist && zip -r "../assets/tm-sync-${GITHUB_REF_NAME#v}.zip" apps
+
+      - name: List release files
         run: find assets -type f | sort
 
       - name: Attach binaries to GitHub Release
@@ -67,7 +111,7 @@ jobs:
           fail_on_unmatched_files: true
           working_directory: assets
           files: |
-            **/*.dmg
-            **/*.exe
+            *.zip
+            *.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

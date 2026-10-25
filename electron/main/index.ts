@@ -1,11 +1,14 @@
+import './threadpool'
 import fs from 'node:fs'
-import { app, BrowserWindow, screen, shell, ipcMain, Tray, Menu } from 'electron'
+import { app, BrowserWindow, screen, shell, ipcMain, Tray, Menu, nativeImage, type MenuItemConstructorOptions } from 'electron'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
 import { update } from './update'
-import { registerMemcardIpc, resumeMemcardSession } from './memcard'
+import { installConsoleLogging, log, logFilePath } from './log'
+import { onPlaylistsChanged, registerMemcardIpc, resumeMemcardSession, setActivePlaylist, trayPlaylists } from './memcard'
+import { CKIND_ICON_SLUGS } from './gcmemcard/tmceExportHeader'
 import { createAppWindowIcon, createTrayMenuBarImage } from './trayIcon'
 
 const require = createRequire(import.meta.url)
@@ -47,10 +50,11 @@ if (!app.requestSingleInstanceLock()) {
 
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
+let isQuitting = false
 const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
 
-async function createWindow() {
+async function createWindow(startHidden = false) {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
   win = new BrowserWindow({
     title: 'Wii Memcard Manager',
@@ -77,9 +81,19 @@ async function createWindow() {
     win.loadFile(indexHtml)
   }
 
+  // On macOS closing the window (red dot / ⌘W) just hides it: the app keeps running in the
+  // menu bar and leaves the Dock. Only Quit (tray menu or ⌘Q) really exits.
+  win.on('close', (e) => {
+    log.info(`[window] close requested (quitting=${isQuitting}, tray=${Boolean(tray)})`)
+    if (process.platform !== 'darwin' || isQuitting || !tray) return
+    e.preventDefault()
+    win?.hide()
+    hideFromDock()
+  })
+
   win.once('ready-to-show', () => {
     win?.maximize()
-    win?.show()
+    if (!startHidden) win?.show()
   })
 
   // Test actively push message to the Electron-Renderer
@@ -97,10 +111,40 @@ async function createWindow() {
   update(win)
 }
 
+installConsoleLogging()
+log.info(`--- Wii Memcard Manager ${app.getVersion()} starting (packaged=${app.isPackaged}) ---`)
 registerMemcardIpc()
 
+/**
+ * Packaged macOS builds run as a background menu-bar app: registered as a login item the first
+ * time they launch (toggle in the tray menu), and started without a window when macOS opens them
+ * at login so the folder watch and Wii sync just run.
+ */
+const LOGIN_ITEM_MARKER = () => path.join(app.getPath('userData'), '.login-item-configured')
+
+function ensureLoginItemOnFirstRun() {
+  if (process.platform !== 'darwin' || !app.isPackaged) return
+  if (fs.existsSync(LOGIN_ITEM_MARKER())) return
+  app.setLoginItemSettings({ openAtLogin: true })
+  try {
+    fs.writeFileSync(LOGIN_ITEM_MARKER(), new Date().toISOString())
+  } catch {
+    /* ignore */
+  }
+}
+
+function launchedAtLogin(): boolean {
+  if (process.platform !== 'darwin' || !app.isPackaged) return false
+  // wasOpenedAtLogin is unreliable on macOS 13+, so also treat "just booted" as a login launch.
+  return Boolean(app.getLoginItemSettings().wasOpenedAtLogin) || os.uptime() < 300
+}
+
 app.whenReady().then(async () => {
-  createWindow()
+  ensureLoginItemOnFirstRun()
+  const startHidden = launchedAtLogin()
+  log.info(`ready; startHidden=${startHidden}; log file ${logFilePath()}`)
+  if (startHidden) app.dock?.hide()
+  createWindow(startHidden)
   await resumeMemcardSession()
   if (process.platform === 'darwin') {
     const img = createTrayMenuBarImage(process.env.APP_ROOT, process.env.VITE_PUBLIC)
@@ -108,7 +152,7 @@ app.whenReady().then(async () => {
       console.error('[tray] Icon image is empty; menu bar tray may not appear')
     }
     tray = new Tray(img)
-    tray.setToolTip('Wii Memcard Manager — saves folder watch and SD copy')
+    tray.setToolTip('Wii Memcard Manager — building and serving GTME.raw to the Wii')
     const showMainWindow = () => {
       app.dock?.show()
       if (win) {
@@ -118,14 +162,83 @@ app.whenReady().then(async () => {
         void createWindow()
       }
     }
-    tray.setContextMenu(
-      Menu.buildFromTemplate([
+    const buildTrayMenu = async (withPlaylists: boolean) => {
+      let playlists: Awaited<ReturnType<typeof trayPlaylists>> = []
+      if (withPlaylists) {
+        try {
+          playlists = await trayPlaylists()
+        } catch (e) {
+          log.warn('[tray] could not list playlists', e)
+        }
+      }
+      const playlistItems: MenuItemConstructorOptions[] = playlists.length
+        ? [
+            { label: 'Put on the card', enabled: false },
+            ...playlists.map(
+              (p): MenuItemConstructorOptions => ({
+                label: p.name,
+                type: 'radio',
+                checked: p.checked,
+                icon: characterMenuIcon(p.opponent),
+                click: () => void setActivePlaylist(p.id),
+              }),
+            ),
+            { label: 'More playlists…', click: () => showMainWindow() },
+            { type: 'separator' },
+          ]
+        : []
+      return Menu.buildFromTemplate([
         { label: 'Show', click: () => showMainWindow() },
         { type: 'separator' },
+        ...playlistItems,
+        { label: 'Open Log', click: () => void shell.openPath(logFilePath()) },
+        {
+          label: 'Open at Login',
+          type: 'checkbox',
+          checked: app.getLoginItemSettings().openAtLogin,
+          enabled: app.isPackaged,
+          click: (item) => {
+            app.setLoginItemSettings({ openAtLogin: item.checked })
+            void refreshTray()
+          },
+        },
+        { type: 'separator' },
         { label: 'Quit', click: () => app.quit() },
-      ]),
-    )
+      ])
+    }
+    const refreshTray = async () => {
+      const menu = await buildTrayMenu(true)
+      tray?.setContextMenu(menu)
+    }
+    tray.setContextMenu(await buildTrayMenu(false))
+    void refreshTray()
+    onPlaylistsChanged(() => void refreshTray())
   }
+})
+
+/** 16-pt stock icon for a matchup playlist in the menu bar menu. */
+function characterMenuIcon(ckind: number | undefined) {
+  if (ckind === undefined || !process.env.VITE_PUBLIC) return undefined
+  const slug = CKIND_ICON_SLUGS[ckind]
+  if (!slug) return undefined
+  const img = nativeImage.createFromPath(path.join(process.env.VITE_PUBLIC, 'charactericons', slug, '0.png'))
+  return img.isEmpty() ? undefined : img.resize({ width: 16, height: 16 })
+}
+
+/** Leave the Dock; retried once because macOS sometimes ignores hide() while the app is frontmost. */
+function hideFromDock() {
+  app.dock?.hide()
+  setTimeout(() => {
+    if (app.dock?.isVisible()) {
+      log.warn('[window] Dock icon still visible after hide(); retrying')
+      app.dock.hide()
+    }
+    log.info(`[window] hidden; dock visible=${app.dock?.isVisible()}`)
+  }, 400)
+}
+
+app.on('before-quit', () => {
+  isQuitting = true
 })
 
 app.on('window-all-closed', () => {
@@ -151,6 +264,7 @@ app.on('activate', () => {
   }
   const allWindows = BrowserWindow.getAllWindows()
   if (allWindows.length) {
+    allWindows[0].show()
     allWindows[0].focus()
   } else {
     void createWindow()

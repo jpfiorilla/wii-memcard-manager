@@ -10,10 +10,16 @@
     "dist-electron",
     "dist"
   ],
+  "extraResources": [
+    {
+      "from": "build/tm-sync-bundle",
+      "to": "tm-sync",
+      "filter": ["**/*"]
+    }
+  ],
   "mac": {
     "artifactName": "${productName}_${version}.${ext}",
     "target": [
-      "dmg",
       "zip"
     ],
     "extendInfo": {

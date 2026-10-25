@@ -1,0 +1,31 @@
+name: TM Sync (Wii app)
+
+# Branch/PR builds of TM Sync (artifact "tm-sync", used by `npm run fetch:tm-sync`).
+# Releases build and publish TM Sync together with the app in build-release.yml.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["tm-sync/**", ".github/workflows/tm-sync.yml"]
+  pull_request:
+    paths: ["tm-sync/**"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitppc:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build boot.dol
+        run: make -C tm-sync package
+      - name: Zip for the SD card
+        run: cd tm-sync/dist && apt-get update -qq && apt-get install -y -qq zip >/dev/null && zip -r ../../tm-sync.zip apps
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tm-sync
+          path: tm-sync.zip
+          if-no-files-found: error

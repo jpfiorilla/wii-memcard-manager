@@ -9,8 +9,9 @@
  * checksum-verified 200 (no Wi-Fi, Mac asleep, 304, 404, timeout...) boots exactly
  * as normal with whatever save is already on the SD card, with no extra delay.
  *
- * Buttons on the status screen: A = launch now, HOME/START = exit to the Homebrew Channel.
- * Hold B while TM Sync starts to skip the network step.
+ * GameCube START at any point (including mid-sync): skip the network step and boot Nintendont now.
+ * Buttons on the status screen: A/START = launch now, HOME = exit to the Homebrew Channel.
+ * Hold B while TM Sync starts to skip the network step and still show the status screen.
  */
 #include <dirent.h>
 #include <errno.h>
@@ -91,13 +92,21 @@ static int poll_buttons(void)
 	PAD_ScanPads();
 	u32 w = WPAD_ButtonsHeld(0);
 	u16 g = PAD_ButtonsHeld(0);
-	if ((w & (WPAD_BUTTON_HOME | WPAD_CLASSIC_BUTTON_HOME)) || (g & PAD_BUTTON_START)) return BTN_EXIT;
-	if ((w & (WPAD_BUTTON_A | WPAD_CLASSIC_BUTTON_A)) || (g & PAD_BUTTON_A)) return BTN_LAUNCH;
+	if (w & (WPAD_BUTTON_HOME | WPAD_CLASSIC_BUTTON_HOME)) return BTN_EXIT;
+	if ((w & (WPAD_BUTTON_A | WPAD_CLASSIC_BUTTON_A)) || (g & (PAD_BUTTON_A | PAD_BUTTON_START))) return BTN_LAUNCH;
 	if ((w & (WPAD_BUTTON_B | WPAD_CLASSIC_BUTTON_B)) || (g & PAD_BUTTON_B)) return BTN_SKIP;
 	return BTN_NONE;
 }
 
-/* Wait up to ms; returns early on A (launch) or HOME/START (exit). */
+/* GameCube START: skip the sync and boot right away. Also polled from inside the network code
+ * (tm_set_cancel_check), so it works while Wi-Fi is connecting or the Mac is being searched for. */
+static bool gc_start_pressed(void)
+{
+	PAD_ScanPads();
+	return (PAD_ButtonsHeld(0) & PAD_BUTTON_START) != 0;
+}
+
+/* Wait up to ms; returns early on A/START (launch) or HOME (exit). */
 static int pause_for(int ms)
 {
 	uint64_t end = tm_now_ms() + (uint64_t)ms;
@@ -196,7 +205,7 @@ static void prune_backups(const char *dir, const char *game, int keep)
 
 /* ------------------------------------------------------------------ sync */
 
-typedef enum { SYNC_SKIPPED, SYNC_UP_TO_DATE, SYNC_UPDATED, SYNC_NOTHING_STAGED, SYNC_FAILED } sync_outcome;
+typedef enum { SYNC_SKIPPED, SYNC_CANCELLED, SYNC_UP_TO_DATE, SYNC_UPDATED, SYNC_NOTHING_STAGED, SYNC_FAILED } sync_outcome;
 
 static bool g_net_up;
 static uint32_t g_mac_ip;
@@ -226,6 +235,7 @@ static sync_outcome do_sync_inner(const tmsync_config *cfg, const char *app_dir)
 
 	say("Connecting to Wi-Fi...");
 	if (!tm_net_up(deadline, err, sizeof(err))) {
+		if (tm_cancelled()) return SYNC_CANCELLED;
 		say("  %s", err);
 		return SYNC_FAILED;
 	}
@@ -261,6 +271,7 @@ static sync_outcome do_sync_inner(const tmsync_config *cfg, const char *app_dir)
 		mac_ip = hint;
 		tm_log("discover: skipping broadcast, asking %s:%d directly", cfg->host[0] ? cfg->host : "last known Mac", mac_port);
 	} else if (!tm_discover(0, disc_deadline, &mac_ip, &mac_port)) {
+		if (tm_cancelled()) return SYNC_CANCELLED;
 		/* Mac off / app closed: don't risk a slow TCP connect, just boot. */
 		say("  Mac not found - booting with the save already on the SD card.");
 		say("  (Is Wii Memcard Manager running on the Mac, on the same network?)");
@@ -281,7 +292,7 @@ static sync_outcome do_sync_inner(const tmsync_config *cfg, const char *app_dir)
 	snprintf(url, sizeof(url), "/tmsync/v1/saves/%s.raw", cfg->game);
 	tm_http_result res;
 	bool ok = tm_http_get(mac_ip, mac_port, url, have_local ? last_etag : NULL, deadline, &res, err, sizeof(err));
-	if (!ok && direct) {
+	if (!ok && direct && !tm_cancelled()) {
 		/* The Mac may have a new address: fall back to searching for it once. */
 		tm_log("sync: direct request failed (%s); searching instead", err);
 		uint64_t d2 = tm_now_ms() + 2500;
@@ -295,6 +306,7 @@ static sync_outcome do_sync_inner(const tmsync_config *cfg, const char *app_dir)
 		}
 	}
 	if (!ok) {
+		if (tm_cancelled()) return SYNC_CANCELLED;
 		say("  %s", err);
 		return SYNC_FAILED;
 	}
@@ -378,6 +390,7 @@ static const char *outcome_name(int o)
 {
 	switch (o) {
 	case SYNC_SKIPPED: return "skipped";
+	case SYNC_CANCELLED: return "skipped with START";
 	case SYNC_UP_TO_DATE: return "up to date";
 	case SYNC_UPDATED: return "updated";
 	case SYNC_NOTHING_STAGED: return "nothing staged on the Mac";
@@ -393,7 +406,7 @@ static sync_outcome do_sync(const tmsync_config *cfg, const char *app_dir)
 	uint64_t t0 = tm_now_ms();
 	sync_outcome o = do_sync_inner(cfg, app_dir);
 	tm_log("sync: outcome = %s (%u ms)", outcome_name(o), (unsigned)(tm_now_ms() - t0));
-	if (g_net_up && g_mac_ip) {
+	if (g_net_up && g_mac_ip && o != SYNC_CANCELLED) {
 		size_t n = 0;
 		uint8_t *tail = tm_log_tail(48 * 1024, &n);
 		int status = 0;
@@ -552,8 +565,18 @@ int main(int argc, char **argv)
 		cfg.nintendont[0] ? cfg.nintendont : "(auto)", cfg.nincfg[0] ? cfg.nincfg : "(auto)",
 		cfg.launch, cfg.autoboot, cfg.timeout_s, cfg.keep_backups, cfg.pause_ms);
 
-	bool skip = poll_buttons() == BTN_SKIP;
+	say("Press START to skip the sync and boot now.");
+	tm_set_cancel_check(gc_start_pressed);
+	bool start_now = gc_start_pressed();
+	bool skip = start_now || poll_buttons() == BTN_SKIP;
 	sync_outcome r = skip ? SYNC_SKIPPED : do_sync(&cfg, app_dir);
+	if (start_now || tm_cancelled()) {
+		/* Straight to Nintendont: no status-screen pause, and START means boot even with launch=0. */
+		tm_log("START pressed - skipping sync (%s), launching", start_now ? "held at startup" : outcome_name(r));
+		say("START - skipping the sync.");
+		launch_nintendont(&cfg);
+		return 0;
+	}
 	if (skip) say("B held - skipping sync.");
 
 	if (!cfg.launch) {
@@ -564,7 +587,7 @@ int main(int argc, char **argv)
 	}
 
 	say("");
-	say("A: launch now   HOME/START: back to Homebrew Channel");
+	say("A/START: launch now   HOME: back to Homebrew Channel");
 	/* Failures never cost extra time: anything but a good new card just boots as normal. */
 	(void)r;
 	int b = pause_for(cfg.pause_ms);

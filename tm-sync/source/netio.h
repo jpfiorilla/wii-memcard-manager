@@ -17,6 +17,12 @@ typedef struct {
 
 uint64_t tm_now_ms(void);
 
+/* Cancellation (START = skip the sync). `fn` is polled about every 50 ms inside every network
+ * wait; once it returns true, tm_cancelled() stays true and network calls return false promptly
+ * (err = "skipped"). Setting a new check clears the latch. */
+void tm_set_cancel_check(bool (*fn)(void));
+bool tm_cancelled(void);
+
 /* Bring up Wi-Fi/Ethernet using the Wii's saved connection; false on timeout/failure. */
 bool tm_net_up(uint64_t deadline_ms, char *err, size_t errlen);
 void tm_net_down(void);

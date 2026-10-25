@@ -31,9 +31,11 @@ It boots the last game you played in Nintendont (from `sd:/nincfg.bin`).
 
 ## Controls
 
+- **START** (GameCube controller) — skip the sync and boot TM:CE right away. Works at any point
+  before Nintendont starts, including while Wi-Fi is connecting or it's looking for the Mac.
 - **A** — launch now
-- **HOME / START** — back to the Homebrew Channel
-- **Hold B** while it starts — skip the sync
+- **HOME** (Wii Remote) — back to the Homebrew Channel
+- **Hold B** while it starts — skip the sync but still show the status screen
 
 ## config.ini
 

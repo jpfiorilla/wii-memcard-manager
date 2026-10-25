@@ -6,7 +6,7 @@
 	<short_description>Sync TM:CE save, then boot Nintendont</short_description>
 	<long_description>Pulls the newest GTME.raw from Wii Memcard Manager on your Mac over Wi-Fi (only when it changed), writes it to the SD card, then boots Nintendont straight into your last game (regular Nintendont: Slippi Nintendont has no memory card emulation).
 
-A: launch now. HOME/START: back to the Homebrew Channel. Hold B at startup to skip the sync.</long_description>
+START (GameCube): skip the sync and boot now. A: launch now. HOME: back to the Homebrew Channel. Hold B at startup to skip the sync.</long_description>
 	<!-- Nintendont needs AHBPROT off and our current IOS; we pass both through. -->
 	<no_ios_reload/>
 	<ahb_access/>

@@ -30,6 +30,24 @@ static int remaining_ms(uint64_t deadline)
 	return now >= deadline ? 0 : (int)(deadline - now);
 }
 
+static bool (*s_cancel_fn)(void);
+static bool s_cancelled;
+
+void tm_set_cancel_check(bool (*fn)(void))
+{
+	s_cancel_fn = fn;
+	s_cancelled = false;
+}
+
+bool tm_cancelled(void)
+{
+	if (!s_cancelled && s_cancel_fn && s_cancel_fn()) {
+		s_cancelled = true;
+		tm_log("net: cancel requested");
+	}
+	return s_cancelled;
+}
+
 /* ---------------------------------------------------------------- bring-up */
 
 static volatile int s_init_done;
@@ -43,7 +61,8 @@ static s32 init_cb(s32 result, void *usr)
 	return 0;
 }
 
-/* One net_init_async attempt; 0 = up, <0 = IOS error, 1 = ran out of time (already deinit'd). */
+/* One net_init_async attempt; 0 = up, <0 = IOS error, 1 = ran out of time, 2 = cancelled
+ * (1 and 2 already deinit'd). */
 static int net_up_once(uint64_t deadline_ms, int attempt)
 {
 	s_init_done = 0;
@@ -57,6 +76,11 @@ static int net_up_once(uint64_t deadline_ms, int attempt)
 	}
 	uint64_t next_tick = t0 + 2000;
 	while (!s_init_done) {
+		if (tm_cancelled()) {
+			tm_log("net: cancelled after %u ms", (unsigned)(tm_now_ms() - t0));
+			net_deinit(); /* aborts the pending async init */
+			return 2;
+		}
 		if (remaining_ms(deadline_ms) == 0) {
 			tm_log("net: still not up after %u ms - giving up", (unsigned)(tm_now_ms() - t0));
 			net_deinit(); /* aborts the pending async init */
@@ -80,6 +104,10 @@ bool tm_net_up(uint64_t deadline_ms, char *err, size_t errlen)
 	int last = 0;
 	for (int attempt = 1; attempt <= 4; attempt++) {
 		last = net_up_once(deadline_ms, attempt);
+		if (last == 2) {
+			snprintf(err, errlen, "skipped");
+			return false;
+		}
 		if (last == 0) {
 			char ip[20];
 			tm_format_ipv4(tm_local_ip(), ip, sizeof(ip));
@@ -90,7 +118,11 @@ bool tm_net_up(uint64_t deadline_ms, char *err, size_t errlen)
 		net_deinit();
 		if (remaining_ms(deadline_ms) < 5000) break;
 		tm_log("net: retrying in 1 s");
-		usleep(1000 * 1000);
+		for (int i = 0; i < 50 && !tm_cancelled(); i++) usleep(20 * 1000);
+		if (tm_cancelled()) {
+			snprintf(err, errlen, "skipped");
+			return false;
+		}
 	}
 	if (last == 1)
 		snprintf(err, errlen, "Wi-Fi didn't come up in %u s (raise timeout= in config.ini)",
@@ -138,11 +170,19 @@ static void make_addr(struct sockaddr_in *sa, uint32_t ip, int port)
 	sa->sin_addr.s_addr = htonl(ip);
 }
 
+/* Polls in <=50 ms slices so a cancel request is noticed quickly; false on timeout or cancel. */
 static bool wait_readable(s32 sock, int timeout_ms)
 {
-	struct pollsd p = { .socket = sock, .events = POLLIN, .revents = 0 };
-	s32 r = net_poll(&p, 1, timeout_ms);
-	return r > 0 && (p.revents & POLLIN);
+	uint64_t end = tm_now_ms() + (uint64_t)(timeout_ms > 0 ? timeout_ms : 0);
+	for (;;) {
+		if (tm_cancelled()) return false;
+		int left = remaining_ms(end);
+		int slice = left < 50 ? left : 50;
+		struct pollsd p = { .socket = sock, .events = POLLIN, .revents = 0 };
+		s32 r = net_poll(&p, 1, slice);
+		if (r > 0 && (p.revents & POLLIN)) return true;
+		if (r < 0 || left <= 50) return false;
+	}
 }
 
 /* ---------------------------------------------------------------- discovery */
@@ -175,7 +215,7 @@ bool tm_discover(uint32_t hint_ip, uint64_t deadline_ms, uint32_t *out_ip, int *
 
 	bool found = false;
 	int attempt = 0;
-	while (!found && remaining_ms(deadline_ms) > 0) {
+	while (!found && remaining_ms(deadline_ms) > 0 && !tm_cancelled()) {
 		for (int i = 0; i < n; i++) {
 			if (hint_ip && i > 0 && attempt == 0) continue; /* try the configured host alone first */
 			struct sockaddr_in to;
@@ -241,6 +281,10 @@ bool tm_http_get(uint32_t ip, int port, const char *path, const char *if_none_ma
                  uint64_t deadline_ms, tm_http_result *out, char *err, size_t errlen)
 {
 	memset(out, 0, sizeof(*out));
+	if (tm_cancelled()) {
+		snprintf(err, errlen, "skipped");
+		return false;
+	}
 	uint64_t t0 = tm_now_ms();
 	tm_log("http: GET %s (If-None-Match: %s, budget %d ms)", path,
 		if_none_match && *if_none_match ? if_none_match : "-", remaining_ms(deadline_ms));
@@ -293,7 +337,11 @@ bool tm_http_get(uint32_t ip, int port, const char *path, const char *if_none_ma
 	for (;;) {
 		int left = remaining_ms(deadline_ms);
 		if (left == 0) { snprintf(err, errlen, "download timed out"); ok = false; break; }
-		if (!wait_readable(sock, left)) { snprintf(err, errlen, "download timed out"); ok = false; break; }
+		if (!wait_readable(sock, left)) {
+			snprintf(err, errlen, "%s", tm_cancelled() ? "skipped" : "download timed out");
+			ok = false;
+			break;
+		}
 		if (len == cap) {
 			if (cap >= MAX_RESPONSE) { snprintf(err, errlen, "response too large"); ok = false; break; }
 			cap *= 2;

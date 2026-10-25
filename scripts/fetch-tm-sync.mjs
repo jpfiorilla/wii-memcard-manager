@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 const repo = 'jpfiorilla/wii-memcard-manager'
-const sh = (cmd, args, opts = {}) => execFileSync(cmd, args, { encoding: 'utf-8', cwd: root, ...opts }).trim()
+const sh = (cmd, args, opts = {}) => (execFileSync(cmd, args, { encoding: 'utf-8', cwd: root, ...opts }) ?? '').trim()
 
 const branch = sh('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
 const runId = sh('gh', [
